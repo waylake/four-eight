@@ -1,5 +1,9 @@
 #!/usr/bin/env swift
-// 앱 아이콘 생성 — 한지 위 네 기둥.
+// 앱 아이콘 생성 — 한지 위의 명식.
+//
+// 네 기둥이 각각 천간과 지지 두 칸으로 서서 여덟 칸이 된다. 사주팔자이자
+// 앱 이름이다. 일주 열에만 주사(朱砂) 테두리를 둘러 "나"를 표시한다.
+//
 // 사용: swift scripts/gen_appicon.swift <출력 PNG 경로>
 
 import AppKit
@@ -10,14 +14,22 @@ let outPath = CommandLine.arguments.count > 1
     ? CommandLine.arguments[1]
     : "App/FourEight/Assets.xcassets/AppIcon.appiconset/icon_1024.png"
 
-func color(_ hex: UInt32) -> CGColor {
+func color(_ hex: UInt32, alpha: CGFloat = 1) -> CGColor {
     CGColor(
         srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
         green: CGFloat((hex >> 8) & 0xFF) / 255,
         blue: CGFloat(hex & 0xFF) / 255,
-        alpha: 1
+        alpha: alpha
     )
 }
+
+// 오행 잉크 — 앱의 라이트 모드 팔레트와 같은 값.
+let wood: UInt32 = 0x00876B
+let fire: UInt32 = 0xD8452B
+let earth: UInt32 = 0x8A5C03
+let metal: UInt32 = 0x6C7DD8
+let water: UInt32 = 0x2E4E9C
+let cinnabar: UInt32 = 0xB43A2E
 
 let ctx = CGContext(
     data: nil, width: Int(size), height: Int(size),
@@ -26,18 +38,17 @@ let ctx = CGContext(
     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
 )!
 
-// macOS 아이콘 관례: 여백을 두른 둥근 사각 판.
+// macOS 아이콘 관례의 둥근 사각 판.
 let margin = size * 0.098
 let plate = CGRect(x: margin, y: margin, width: size - margin * 2, height: size - margin * 2)
 let plateRadius = plate.width * 0.225
 
-// 한지 판 — 살짝 따뜻한 종이색, 아래로 미세한 명암.
-let platePath = CGPath(roundedRect: plate, cornerWidth: plateRadius, cornerHeight: plateRadius, transform: nil)
-ctx.addPath(platePath)
+ctx.saveGState()
+ctx.addPath(CGPath(roundedRect: plate, cornerWidth: plateRadius, cornerHeight: plateRadius, transform: nil))
 ctx.clip()
 let gradient = CGGradient(
     colorsSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
-    colors: [color(0xFBF8F1), color(0xF1EBDD)] as CFArray,
+    colors: [color(0xFCF9F3), color(0xF0E9DA)] as CFArray,
     locations: [0, 1]
 )!
 ctx.drawLinearGradient(
@@ -46,45 +57,71 @@ ctx.drawLinearGradient(
     end: CGPoint(x: size / 2, y: margin),
     options: []
 )
+ctx.restoreGState()
 
-// 네 기둥 — 오행 잉크 (청록·주사·황토·감청), 시일월년의 압축 상형.
-let inks: [UInt32] = [0x00876B, 0xD84B2F, 0x8A5C03, 0x2E4E9C]
-let barCount = 4.0
-let barWidth = plate.width * 0.118
-let barGap = plate.width * 0.072
-let groupWidth = barWidth * barCount + barGap * (barCount - 1)
-let baseX = plate.minX + (plate.width - groupWidth) / 2
-let baseY = plate.minY + plate.height * 0.24
-// 높낮이 리듬 — 명식의 들쭉날쭉한 기세.
-let heights: [Double] = [0.42, 0.52, 0.36, 0.47]
+// 여덟 칸. 열은 시일월년 순으로 서고, 위가 천간 아래가 지지다.
+// 배열은 균형 잡힌 오행 분포를 따르되 일주 열(index 1)이 화·목이 되게 두었다.
+let columns: [(stem: UInt32, branch: UInt32)] = [
+    (metal, water),   // 시주
+    (fire, wood),     // 일주 — 강조
+    (wood, earth),    // 월주
+    (water, fire),    // 년주
+]
+let dayColumn = 1
 
-for i in 0..<4 {
-    let h = plate.height * heights[i]
-    let rect = CGRect(
-        x: baseX + Double(i) * (barWidth + barGap),
-        y: baseY,
-        width: barWidth,
-        height: h
-    )
-    let path = CGPath(
-        roundedRect: rect,
-        cornerWidth: barWidth * 0.24, cornerHeight: barWidth * 0.24,
-        transform: nil
-    )
-    ctx.addPath(path)
-    ctx.setFillColor(color(inks[i]))
-    ctx.fillPath()
+let cellW = plate.width * 0.152
+let cellH = plate.height * 0.208
+let colGap = plate.width * 0.052
+let rowGap = plate.height * 0.030
+let cellR = cellW * 0.26
+
+let groupW = cellW * 4 + colGap * 3
+let groupH = cellH * 2 + rowGap
+let originX = plate.minX + (plate.width - groupW) / 2
+let originY = plate.minY + (plate.height - groupH) / 2 + plate.height * 0.028
+
+for (i, column) in columns.enumerated() {
+    let x = originX + Double(i) * (cellW + colGap)
+
+    for (row, ink) in [(1, column.stem), (0, column.branch)] {
+        let y = originY + Double(row) * (cellH + rowGap)
+        let rect = CGRect(x: x, y: y, width: cellW, height: cellH)
+        ctx.addPath(CGPath(roundedRect: rect, cornerWidth: cellR, cornerHeight: cellR, transform: nil))
+        ctx.setFillColor(color(ink))
+        ctx.fillPath()
+    }
+
+    // 일주 열에만 주사 테두리 — 명식에서 "나"에 해당하는 자리.
+    if i == dayColumn {
+        let pad = cellW * 0.145
+        let frame = CGRect(
+            x: x - pad, y: originY - pad,
+            width: cellW + pad * 2, height: groupH + pad * 2
+        )
+        ctx.addPath(CGPath(
+            roundedRect: frame,
+            cornerWidth: cellR + pad * 0.8, cornerHeight: cellR + pad * 0.8,
+            transform: nil
+        ))
+        ctx.setStrokeColor(color(cinnabar, alpha: 0.85))
+        ctx.setLineWidth(size * 0.0135)
+        ctx.strokePath()
+    }
 }
 
-// 바닥 기준선 — 지평의 먹선.
+// 지반의 먹선.
 ctx.setFillColor(color(0x3A342C))
 let baseline = CGRect(
-    x: plate.minX + plate.width * 0.16,
-    y: baseY - plate.height * 0.045,
-    width: plate.width * 0.68,
-    height: plate.height * 0.012
+    x: originX - cellW * 0.30,
+    y: originY - plate.height * 0.077,
+    width: groupW + cellW * 0.60,
+    height: plate.height * 0.0125
 )
-ctx.addPath(CGPath(roundedRect: baseline, cornerWidth: baseline.height / 2, cornerHeight: baseline.height / 2, transform: nil))
+ctx.addPath(CGPath(
+    roundedRect: baseline,
+    cornerWidth: baseline.height / 2, cornerHeight: baseline.height / 2,
+    transform: nil
+))
 ctx.fillPath()
 
 let image = ctx.makeImage()!

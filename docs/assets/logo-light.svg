@@ -2,10 +2,15 @@
   <rect x="6" y="6" width="116" height="116" rx="26" fill="#FAF7F0"/>
   <rect x="6.5" y="6.5" width="115" height="115" rx="25.5" stroke="#DED6C6"/>
   <g>
-    <rect x="27" y="46" width="13" height="44" rx="3.2" fill="#00876B"/>
-    <rect x="48" y="34" width="13" height="56" rx="3.2" fill="#D8452B"/>
-    <rect x="69" y="53" width="13" height="37" rx="3.2" fill="#8A5C03"/>
-    <rect x="90" y="42" width="13" height="48" rx="3.2" fill="#2E4E9C"/>
+    <rect x="25" y="38" width="17.5" height="24" rx="4.6" fill="#6C7DD8"/>
+    <rect x="25" y="66" width="17.5" height="24" rx="4.6" fill="#2E4E9C"/>
+    <rect x="49" y="38" width="17.5" height="24" rx="4.6" fill="#D8452B"/>
+    <rect x="49" y="66" width="17.5" height="24" rx="4.6" fill="#00876B"/>
+    <rect x="73" y="38" width="17.5" height="24" rx="4.6" fill="#00876B"/>
+    <rect x="73" y="66" width="17.5" height="24" rx="4.6" fill="#8A5C03"/>
+    <rect x="97" y="38" width="17.5" height="24" rx="4.6" fill="#2E4E9C"/>
+    <rect x="97" y="66" width="17.5" height="24" rx="4.6" fill="#D8452B"/>
   </g>
-  <rect x="22" y="95" width="86" height="3.6" rx="1.8" fill="#3A342C"/>
+  <rect x="45.6" y="34.6" width="24.3" height="58.8" rx="7.4" stroke="#B43A2E" stroke-opacity="0.85" stroke-width="1.8"/>
+  <rect x="20" y="99" width="99.5" height="3.2" rx="1.6" fill="#3A342C"/>
 </svg>
