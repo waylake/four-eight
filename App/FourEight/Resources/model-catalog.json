@@ -1,0 +1,45 @@
+{
+  "verifiedAt": "2026-07-27",
+  "models": [
+    {
+      "id": "gemma-4-e2b-it-4bit",
+      "displayName": "Gemma 4 E2B · 4-bit",
+      "hfRepo": "mlx-community/gemma-4-e2b-it-4bit",
+      "quantization": "4bit",
+      "sizeBytes": 3550670554,
+      "variant": "E2B",
+      "recommended": true,
+      "notes": "기본 권장. 8GB 통합 메모리에서도 동작."
+    },
+    {
+      "id": "gemma-4-e2b-it-qat-4bit",
+      "displayName": "Gemma 4 E2B · QAT 4-bit",
+      "hfRepo": "mlx-community/gemma-4-E2B-it-qat-4bit",
+      "quantization": "4bit-qat",
+      "sizeBytes": 4329240325,
+      "variant": "E2B",
+      "recommended": false,
+      "notes": "양자화 인지 학습 체크포인트 — 같은 4-bit에서 더 나은 품질."
+    },
+    {
+      "id": "gemma-4-e4b-it-4bit",
+      "displayName": "Gemma 4 E4B · 4-bit",
+      "hfRepo": "mlx-community/gemma-4-e4b-it-4bit",
+      "quantization": "4bit",
+      "sizeBytes": 5146800534,
+      "variant": "E4B",
+      "recommended": false,
+      "notes": "16GB 이상 메모리 권장. 문장 품질 향상."
+    },
+    {
+      "id": "gemma-4-e4b-it-qat-4bit",
+      "displayName": "Gemma 4 E4B · QAT 4-bit",
+      "hfRepo": "mlx-community/gemma-4-E4B-it-qat-4bit",
+      "quantization": "4bit-qat",
+      "sizeBytes": 6798307742,
+      "variant": "E4B",
+      "recommended": false,
+      "notes": "최고 품질 옵션. 여유 메모리 필요."
+    }
+  ]
+}
