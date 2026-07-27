@@ -68,4 +68,9 @@ final class PersonStore {
         people.removeAll { $0.id == id }
         save()
     }
+
+    /// 스크린샷 생성 전용 — 사용자의 실제 데이터를 건드리지 않는다.
+    func setPeopleWithoutPersisting(_ newValue: [Person]) {
+        people = newValue
+    }
 }

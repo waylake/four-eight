@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
-# README용 스크린샷 촬영.
+# README용 스크린샷 생성.
 #
-# 화면 기록 권한이 필요합니다. 터미널에서 처음 실행하면 시스템 설정으로
-# 안내되며, 승인 후 터미널을 재시작하고 다시 실행하세요.
+# 화면 캡처가 아니라 SwiftUI ImageRenderer로 실제 뷰 트리를 렌더링한다.
+# 화면 기록 권한이 필요 없고, 같은 입력에 같은 이미지가 나온다.
+# 창 테두리(타이틀바·신호등)만 macOS 표준 형태로 합성한다.
+#
+# 앱은 샌드박스에서 돌기 때문에 저장소 경로에 직접 쓸 수 없다. 컨테이너
+# 안에 쓴 뒤 여기서 꺼내 온다.
 #
 # 사용: bash scripts/shots.sh [출력 디렉터리]
 
 set -euo pipefail
 
 OUT="${1:-docs/assets}"
-mkdir -p "$OUT"
+BUNDLE_ID="com.waylake.FourEight"
+CONTAINER="$HOME/Library/Containers/$BUNDLE_ID/Data/Library/Application Support/FourEight/screenshots"
+
+if [[ ! -d FourEight.xcodeproj ]]; then
+	echo "프로젝트가 없습니다. 먼저 실행하세요: xcodegen generate"
+	exit 1
+fi
 
 APP_DIR=$(xcodebuild -project FourEight.xcodeproj -scheme FourEight \
 	-configuration Debug -showBuildSettings 2>/dev/null |
@@ -18,41 +28,27 @@ APP="$APP_DIR/FourEight.app"
 
 if [[ ! -d "$APP" ]]; then
 	echo "빌드된 앱이 없습니다. 먼저 실행하세요:"
-	echo "  xcodegen generate && xcodebuild -project FourEight.xcodeproj -scheme FourEight -configuration Debug -skipMacroValidation build"
+	echo "  xcodebuild -project FourEight.xcodeproj -scheme FourEight \\"
+	echo "             -configuration Debug -skipMacroValidation -skipPackagePluginValidation build"
 	exit 1
 fi
 
-open -a "$APP"
-sleep 3
+mkdir -p "$OUT"
+rm -f "$CONTAINER"/screenshot-*.png 2>/dev/null || true
 
-WINDOW_ID=$(
-	osascript -e '
-  tell application "System Events"
-    tell process "FourEight"
-      set frontmost to true
-    end tell
-  end tell' >/dev/null 2>&1
-	/usr/bin/python3 -c "
-import Quartz, sys
-for w in Quartz.CGWindowListCopyWindowInfo(
-        Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID):
-    if w.get('kCGWindowOwnerName') == 'FourEight' and w.get('kCGWindowLayer') == 0:
-        b = w['kCGWindowBounds']
-        if b['Width'] > 600:
-            print(w['kCGWindowNumber'])
-            sys.exit()
-"
-)
+echo "렌더링 중…"
+FOUREIGHT_CAPTURE=1 "$APP/Contents/MacOS/FourEight" 2>&1 | grep '스크린샷' || true
 
-if [[ -z "$WINDOW_ID" ]]; then
-	echo "FourEight 창을 찾지 못했습니다. 앱이 떠 있는지 확인하세요."
+shopt -s nullglob
+FILES=("$CONTAINER"/screenshot-*.png)
+if [[ ${#FILES[@]} -eq 0 ]]; then
+	echo "이미지가 생성되지 않았습니다. 컨테이너를 확인하세요:"
+	echo "  $CONTAINER"
 	exit 1
 fi
 
-screencapture -o -l "$WINDOW_ID" "$OUT/screenshot-light.png"
-echo "저장: $OUT/screenshot-light.png"
-
-echo
-echo "다크 모드 캡처는 시스템 설정에서 외관을 바꾼 뒤 다시 실행하세요:"
-echo "  bash scripts/shots.sh"
-echo "그리고 결과를 screenshot-dark.png로 이름을 바꾸세요."
+for f in "${FILES[@]}"; do
+	cp "$f" "$OUT/"
+	echo "  $(basename "$f")"
+done
+echo "완료: $OUT"
