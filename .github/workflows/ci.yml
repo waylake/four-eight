@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: SajuKit
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.app
+
+      - name: Test
+        working-directory: SajuKit
+        run: swift test
+
+  app:
+    name: FourEight.app
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          xcodebuild -project FourEight.xcodeproj \
+                     -scheme FourEight \
+                     -configuration Debug \
+                     -skipMacroValidation \
+                     CODE_SIGNING_ALLOWED=NO \
+                     build
+
+  generated:
+    name: Generated sources are current
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate VSOP87 tables
+        run: python3 scripts/gen_vsop87.py scripts/data/VSOP87D.ear
+
+      - name: Fail if generated output drifted
+        run: |
+          if ! git diff --quiet; then
+            echo "Generated sources differ from committed output."
+            echo "Run: python3 scripts/gen_vsop87.py scripts/data/VSOP87D.ear"
+            git diff --stat
+            exit 1
+          fi

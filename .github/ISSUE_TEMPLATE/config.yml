@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 질문과 논의
+    url: https://github.com/waylake/four-eight/discussions
+    about: 사용법 질문, 명리 해석에 대한 논의, 아이디어 제안은 Discussions에서 시작해 주세요.

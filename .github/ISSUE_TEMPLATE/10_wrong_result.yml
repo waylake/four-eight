@@ -1,0 +1,53 @@
+name: 계산 결과가 다릅니다
+description: 다른 만세력과 명식이 다르게 나오는 경우
+labels: ["accuracy"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        이 프로젝트에서 가장 중요한 제보입니다. 관행 차이인지 버그인지 판별해 반영합니다.
+
+  - type: input
+    id: birth
+    attributes:
+      label: 생년월일시와 출생지
+      description: 공개하기 꺼려지면 결과가 동일하게 갈리는 다른 날짜여도 됩니다.
+      placeholder: 1988-09-05 00:50, 서울
+    validations:
+      required: true
+
+  - type: textarea
+    id: got
+    attributes:
+      label: 이 앱의 결과
+      description: 명식 상단의 보정 표시줄을 함께 적어 주세요. 판별에 결정적입니다.
+      placeholder: |
+        戊辰 庚申 壬戌 壬子
+        진태양시 23:18  경도 −32분  서머타임 −60분  야자시
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 다르게 나온 곳과 그 결과
+      description: 어디서 확인했는지와 그쪽 결과를 적어 주세요.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: settings
+    attributes:
+      label: 설정에서 유파 옵션을 바꿔 보셨나요
+      options:
+        - 아직 안 해봤습니다
+        - 바꿔 봤지만 여전히 다릅니다
+        - 옵션을 바꾸니 일치합니다 (기본값 논의)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 앱 버전
+      placeholder: 0.1.0

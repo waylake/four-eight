@@ -1,0 +1,43 @@
+name: 버그 신고
+description: 계산 결과 외의 문제 (크래시, UI, 모델 다운로드 등)
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 무슨 일이 일어났나요
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 방법
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대한 동작
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS 버전과 칩
+      placeholder: macOS 15.4, M2 Pro
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: 사용 중인 모델
+      description: 모델 없이 사용 중이면 "없음"이라고 적어 주세요.
+      placeholder: Gemma 4 E2B 4-bit

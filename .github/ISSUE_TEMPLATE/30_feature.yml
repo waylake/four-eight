@@ -1,0 +1,36 @@
+name: 기능 제안
+description: 새 기능이나 개선 아이디어
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        먼저 [Discussions](https://github.com/waylake/four-eight/discussions)에서 논의해 주셔도 좋습니다.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 어떤 상황에서 불편했나요
+      description: 해결책보다 문제를 먼저 적어 주세요.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 제안하는 방식
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 관련 영역
+      options:
+        - 계산 엔진
+        - 해석 콘텐츠
+        - 화면과 조작
+        - 온디바이스 모델
+        - 기타
+    validations:
+      required: true
