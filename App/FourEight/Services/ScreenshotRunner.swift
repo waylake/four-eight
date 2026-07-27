@@ -110,7 +110,7 @@ enum ScreenshotRunner {
         ]
 
         Task { @MainActor in
-            // 창을 닫으면 마지막 창일 때 앱이 종료된다. 전부 찍은 뒤 한꺼번에 닫는다.
+            // 창을 닫으면 마지막 창일 때 앱이 종료된다. 전부 찍은 뒤 한꺼번에 정리한다.
             var windows: [NSWindow] = []
             var written = 0
             for shot in shots {
@@ -119,8 +119,13 @@ enum ScreenshotRunner {
                     written += 1
                 }
             }
-            windows.forEach { $0.close() }
+            // close()는 창 해제 애니메이션을 태운다. 곧바로 terminate하면
+            // 진행 중인 애니메이션이 해제된 객체를 건드려 크래시가 난다.
+            // orderOut은 애니메이션 없이 화면에서만 뺀다.
+            windows.forEach { $0.orderOut(nil) }
             NSLog("스크린샷: \(written)/\(shots.count)장 저장 → \(directory.path)")
+            try? await Task.sleep(for: .milliseconds(200))
+            windows.removeAll()
             NSApp.terminate(nil)
         }
     }
@@ -135,10 +140,11 @@ enum ScreenshotRunner {
     private static func render(_ shot: Shot, to directory: URL) async -> NSWindow? {
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: shot.size),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        window.isReleasedWhenClosed = false
         let hosting = NSHostingView(rootView: shot.view)
         hosting.frame = NSRect(origin: .zero, size: shot.size)
         window.contentView = hosting
