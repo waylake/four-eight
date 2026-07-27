@@ -1,0 +1,26 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="640" fill="#FAF7F0"/>
+
+  <g transform="translate(268, 186)">
+    <rect x="0" y="72" width="30" height="132" rx="7" fill="#00876B"/>
+    <rect x="48" y="36" width="30" height="168" rx="7" fill="#D8452B"/>
+    <rect x="96" y="93" width="30" height="111" rx="7" fill="#8A5C03"/>
+    <rect x="144" y="60" width="30" height="144" rx="7" fill="#2E4E9C"/>
+    <rect x="-8" y="218" width="190" height="7" rx="3.5" fill="#3A342C"/>
+  </g>
+
+  <text x="524" y="254" font-family="Georgia, 'Times New Roman', serif" font-size="76" font-weight="600" fill="#2A251F">four-eight</text>
+  <text x="527" y="310" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="27" fill="#6B6259">Four Pillars of Destiny for macOS</text>
+
+  <rect x="527" y="348" width="76" height="2" fill="#B43A2E"/>
+
+  <text x="527" y="410" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="23" fill="#4A443C">Computed by a deterministic engine.</text>
+  <text x="527" y="446" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="23" fill="#4A443C">Interpreted entirely on your Mac.</text>
+
+  <g font-family="'Apple Myungjo', Georgia, serif" font-size="34">
+    <text x="527" y="518" fill="#00876B">癸未</text>
+    <text x="603" y="518" fill="#8A5C03">甲寅</text>
+    <text x="679" y="518" fill="#D8452B">丙寅</text>
+    <text x="755" y="518" fill="#2E4E9C">甲午</text>
+  </g>
+</svg>
