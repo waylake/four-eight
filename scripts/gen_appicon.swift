@@ -90,36 +90,37 @@ for (i, column) in columns.enumerated() {
         ctx.setFillColor(color(ink))
         ctx.fillPath()
     }
-
-    // 일주 열에만 주사 테두리 — 명식에서 "나"에 해당하는 자리.
-    if i == dayColumn {
-        let pad = cellW * 0.145
-        let frame = CGRect(
-            x: x - pad, y: originY - pad,
-            width: cellW + pad * 2, height: groupH + pad * 2
-        )
-        ctx.addPath(CGPath(
-            roundedRect: frame,
-            cornerWidth: cellR + pad * 0.8, cornerHeight: cellR + pad * 0.8,
-            transform: nil
-        ))
-        ctx.setStrokeColor(color(cinnabar, alpha: 0.85))
-        ctx.setLineWidth(size * 0.0135)
-        ctx.strokePath()
-    }
 }
 
-// 지반의 먹선.
-ctx.setFillColor(color(0x3A342C))
-let baseline = CGRect(
-    x: originX - cellW * 0.30,
-    y: originY - plate.height * 0.077,
-    width: groupW + cellW * 0.60,
-    height: plate.height * 0.0125
+// 지반의 먹선. 일주 열 구간만 주사로 끊어 "나"의 자리를 표시한다.
+//
+// 열을 감싸는 테두리를 쓰면 시각 무게가 한쪽으로 쏠려 아이콘 전체가
+// 기울어 보이고, 32pt 도크 크기에서는 잡음이 된다. 밑줄은 격자를
+// 건드리지 않으면서 같은 정보를 전하고 작은 크기에서 자연스럽게 사라진다.
+let baselineY = originY - plate.height * 0.077
+let baselineH = plate.height * 0.0125
+let baselineRect = CGRect(
+    x: originX - cellW * 0.30, y: baselineY,
+    width: groupW + cellW * 0.60, height: baselineH
 )
+ctx.setFillColor(color(0x3A342C))
 ctx.addPath(CGPath(
-    roundedRect: baseline,
-    cornerWidth: baseline.height / 2, cornerHeight: baseline.height / 2,
+    roundedRect: baselineRect,
+    cornerWidth: baselineH / 2, cornerHeight: baselineH / 2,
+    transform: nil
+))
+ctx.fillPath()
+
+let markX = originX + Double(dayColumn) * (cellW + colGap)
+let markH = baselineH * 2.1
+let mark = CGRect(
+    x: markX, y: baselineY - (markH - baselineH) / 2,
+    width: cellW, height: markH
+)
+ctx.setFillColor(color(cinnabar))
+ctx.addPath(CGPath(
+    roundedRect: mark,
+    cornerWidth: markH / 2, cornerHeight: markH / 2,
     transform: nil
 ))
 ctx.fillPath()

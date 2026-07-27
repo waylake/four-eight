@@ -38,3 +38,5 @@
 | [0003](./0003-compute-astronomy-in-process.md) | 천문 계산을 앱 안에서 직접 수행한다 | accepted |
 | [0004](./0004-rule-index-over-vector-retrieval.md) | 벡터 검색 대신 룰 인덱스를 쓴다 | accepted |
 | [0005](./0005-expose-school-differences-as-settings.md) | 유파 차이를 설정으로 드러낸다 | accepted |
+| [0006](./0006-generation-state-belongs-to-the-document.md) | 생성 상태는 뷰가 아니라 문서에 둔다 | accepted |
+| [0007](./0007-describe-days-do-not-rank-them.md) | 날을 서술하되 등급을 매기지 않는다 | accepted |
