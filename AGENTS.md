@@ -18,10 +18,11 @@ AI 코딩 에이전트가 이 저장소에서 작업할 때 알아야 할 것들
 cd SajuKit && swift test              # 엔진만. Xcode 불필요
 xcodegen generate                     # project.yml → .xcodeproj
 xcodebuild -project FourEight.xcodeproj -scheme FourEight \
-           -configuration Debug -skipMacroValidation build
+           -configuration Debug \
+           -skipMacroValidation -skipPackagePluginValidation build
 ```
 
-`-skipMacroValidation`은 선택이 아닙니다. `mlx-swift-lm`의 매크로 신뢰 승인 때문입니다.
+두 skip 플래그는 선택이 아닙니다. `mlx-swift-lm`의 매크로와 `mlx-swift`의 `CudaBuild` 플러그인이 신뢰 승인을 요구합니다.
 
 `FourEight.xcodeproj`는 생성물입니다. 커밋하지 마세요.
 

@@ -52,10 +52,11 @@ swift test --filter PublishedCaseTests
 ```bash
 xcodegen generate
 xcodebuild -project FourEight.xcodeproj -scheme FourEight \
-           -configuration Debug -skipMacroValidation build
+           -configuration Debug \
+           -skipMacroValidation -skipPackagePluginValidation build
 ```
 
-`-skipMacroValidation`이 필요합니다. `mlx-swift-lm`의 `MLXHuggingFaceMacros`가 매크로 신뢰 승인을 요구하기 때문입니다. Xcode GUI에서는 최초 1회 승인 대화상자를 통과하면 됩니다.
+두 플래그가 필요합니다. `-skipMacroValidation`은 `mlx-swift-lm`의 `MLXHuggingFaceMacros`가, `-skipPackagePluginValidation`은 `mlx-swift`의 `CudaBuild` 빌드 플러그인이 신뢰 승인을 요구하기 때문입니다. Xcode GUI에서는 최초 1회 승인 대화상자를 통과하면 됩니다.
 
 실행:
 

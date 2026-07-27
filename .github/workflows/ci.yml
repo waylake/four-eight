@@ -42,6 +42,7 @@ jobs:
                      -scheme FourEight \
                      -configuration Debug \
                      -skipMacroValidation \
+                     -skipPackagePluginValidation \
                      CODE_SIGNING_ALLOWED=NO \
                      build
 
