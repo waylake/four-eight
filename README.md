@@ -31,6 +31,10 @@ four-eight reads a Four Pillars chart the way a careful practitioner would: it r
 - **Nothing leaves your Mac.** Birth data is never transmitted. The network is used for exactly one thing: downloading a model file, if you want one.
 - **Schools disagree, so the app says so.** True solar time, the 야자시 policy, and luck-cycle rounding are settings, not silent assumptions.
 
+<p align="center">
+  <img src="docs/assets/screenshot-today.png" width="760" alt="four-eight showing today's day pillar 癸卯, the governing luck cycles, and a rule-grounded reading with evidence chips">
+</p>
+
 ## What a reading looks like
 
 A birth of 1988-09-05 00:50 in Seoul. Three corrections stack up before a single pillar is named — and each one changes the answer.
@@ -49,16 +53,22 @@ A birth of 1988-09-05 00:50 in Seoul. Three corrections stack up before a single
 
 Drop any one of those corrections and you get a different chart. This case is in the test suite as `PublishedCaseTests.case1988Sept`, matched against a published almanac.
 
-> [!NOTE]
-> App screenshots are added with the first tagged release. Build from source to see it today.
+| Chart | Calendar |
+|---|---|
+| <img src="docs/assets/screenshot-chart.png" alt="The four pillars with hidden stems, ten gods, five-element distribution and luck cycles"> | <img src="docs/assets/screenshot-calendar.png" alt="A month grid where each day shows its own pillar, with a mark on days that contact the natal chart"> |
 
 ## Features
 
-- **Native SwiftUI** — three-column layout, menu bar day-pillar, Settings, dark mode.
+- **Two ways in** — read the chart once, or check what today carries. Both are the same engine.
 - **Deterministic engine** — `SajuKit` is a standalone Swift package with no runtime dependencies.
-- **Optional on-device AI** — Gemma 4 E2B or E4B via MLX, downloaded on demand.
-- **Evidence-linked interpretation** — every section shows which rules produced it.
+- **Optional on-device AI** — Gemma 4 E2B or E4B via MLX, downloaded on demand. Stop and resume generation at any point; finished sections are never rewritten.
+- **Evidence-linked interpretation** — every section shows which rules produced it, in the chart *and* in the calendar.
+- **Grounded conversation** — ask about your chart. The model gets the facts and the matched rules, and is told to say it doesn't know rather than invent.
 - **Lunar calendar** — Korean 음양력 conversion including leap months, computed from first principles.
+
+### Days are not ranked
+
+The calendar never labels a day good or bad. It marks days that *contact* your chart — a clash, a trine completion, a stem combination — and describes what kind of energy the day carries. Ranking days is fear marketing, and it contradicts the point of showing your evidence.
 
 ## Requirements
 
