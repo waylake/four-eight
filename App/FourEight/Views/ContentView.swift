@@ -7,30 +7,25 @@ struct ContentView: View {
     var body: some View {
         @Bindable var state = appState
         NavigationSplitView {
-            PeopleSidebar()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
-        } content: {
-            Group {
-                if let reading = appState.reading {
-                    PillarsCanvasView(reading: reading)
-                } else {
-                    EmptyCanvasView()
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 500, ideal: 560)
+            Sidebar()
+                .navigationSplitViewColumnWidth(min: 208, ideal: 236, max: 300)
         } detail: {
             Group {
                 if let reading = appState.reading {
-                    InterpretationPanel(reading: reading)
+                    switch appState.destination {
+                    case .today:
+                        TodayView(reading: reading)
+                    case .calendar:
+                        FortuneCalendarView(reading: reading)
+                    case .chart:
+                        ChartWorkspace(reading: reading)
+                    case .conversation:
+                        ConversationView(reading: reading)
+                    }
                 } else {
-                    ContentUnavailableView(
-                        "해석",
-                        systemImage: "text.book.closed",
-                        description: Text("인물을 선택하면 명식 해석이 표시됩니다.")
-                    )
+                    WelcomeView()
                 }
             }
-            .navigationSplitViewColumnWidth(min: 320, ideal: 380)
         }
         .sheet(isPresented: $state.isAddingPerson) {
             BirthInputSheet(mode: .add)
@@ -41,26 +36,44 @@ struct ContentView: View {
     }
 }
 
-/// 인물 미선택 상태.
-struct EmptyCanvasView: View {
+/// 명식과 해석을 나란히 두는 작업 공간.
+struct ChartWorkspace: View {
+    let reading: Reading
+
+    var body: some View {
+        HSplitView {
+            PillarsCanvasView(reading: reading)
+                .frame(minWidth: 460, idealWidth: 560)
+            InterpretationPanel(reading: reading)
+                .frame(minWidth: 320, idealWidth: 400)
+        }
+        .navigationTitle(reading.person.name)
+        .navigationSubtitle(reading.person.birthSummary)
+    }
+}
+
+struct WelcomeView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 18) {
             Text("四八")
-                .font(.hanja(size: 72))
+                .font(.hanja(size: 68))
                 .foregroundStyle(.tertiary)
-            Text("사주 명식을 계산할 인물을 추가하세요")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-            Text("생년월일시는 이 Mac을 벗어나지 않습니다.")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
+            VStack(spacing: 6) {
+                Text("명식을 계산할 인물을 추가하세요")
+                    .font(.title3)
+                Text("생년월일시는 이 Mac을 벗어나지 않습니다.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Button("새 인물 추가") {
                 appState.isAddingPerson = true
             }
             .keyboardShortcut(.defaultAction)
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
     }
 }

@@ -34,7 +34,9 @@ struct PillarsCanvasView: View {
                 Text(reading.chart.compactHanja)
                     .font(.hanja(size: 26))
                 Spacer()
-                Text("\(reading.chart.sajuYear)년주 · \(reading.chart.governingJeol.korean)월")
+                // 연도에 String()을 쓰는 이유: 한국어 로케일에서 Int를 그대로
+                // 보간하면 "2,003년"처럼 천 단위 구분자가 붙는다.
+                Text("\(String(reading.chart.sajuYear))년 기준 · \(reading.chart.monthPillar.branch.korean)월(\(reading.chart.governingJeol.korean))")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
