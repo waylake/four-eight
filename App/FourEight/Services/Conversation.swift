@@ -41,6 +41,15 @@ final class Conversation {
     - 구체적인 날짜의 길흉을 물으면, 날에 등급을 매기지 않는다고 설명하고 그날 기운의 성격만 말합니다.
     """
 
+    /// 세션을 다시 만들 수 있도록 재료를 들고 있는다.
+    /// `ChatSession.clear()`는 non-Sendable 값을 격리 경계 밖으로 보내야 해서
+    /// 쓸 수 없다. 어차피 새 세션은 이력이 비어 있으므로 결과가 같다.
+    private struct Recipe {
+        let container: ModelContainer
+        let instructions: String
+    }
+    private var recipe: Recipe?
+
     /// 명식이나 엔진이 바뀌면 대화를 새로 연다.
     func bind(reading: Reading, container: ModelContainer?, engineID: String) {
         let key = "\(reading.person.id)|\(reading.chart.signature)|\(engineID)"
@@ -54,12 +63,9 @@ final class Conversation {
             .flatMap(\.rules)
             .map { "- (\($0.title)) \($0.text)" }
             .joined(separator: "\n")
-        var params = GenerateParameters()
-        params.temperature = 0.6
-        params.maxTokens = 400
 
-        session = ChatSession(
-            container,
+        recipe = Recipe(
+            container: container,
             instructions: """
             \(Self.instructions)
 
@@ -68,7 +74,19 @@ final class Conversation {
 
             [참고 근거]
             \(evidence)
-            """,
+            """
+        )
+        session = makeSession()
+    }
+
+    private func makeSession() -> ChatSession? {
+        guard let recipe else { return nil }
+        var params = GenerateParameters()
+        params.temperature = 0.6
+        params.maxTokens = 400
+        return ChatSession(
+            recipe.container,
+            instructions: recipe.instructions,
             generateParameters: params
         )
     }
@@ -77,19 +95,21 @@ final class Conversation {
         task?.cancel()
         task = nil
         session = nil
+        recipe = nil
         messages = []
         isResponding = false
         errorMessage = nil
         boundKey = nil
     }
 
+    /// 대화 내용만 지운다. 명식과 근거는 그대로 유지한다.
     func clearHistory() {
         task?.cancel()
         task = nil
         messages = []
         isResponding = false
         errorMessage = nil
-        Task { [session] in await session?.clear() }
+        session = makeSession()
     }
 
     func stop() {
