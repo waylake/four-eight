@@ -31,10 +31,26 @@ four-eight reads a Four Pillars chart the way a careful practitioner would: it r
 - **Nothing leaves your Mac.** Birth data is never transmitted. The network is used for exactly one thing: downloading a model file, if you want one.
 - **Schools disagree, so the app says so.** True solar time, the 야자시 policy, and luck-cycle rounding are settings, not silent assumptions.
 
-## Screenshots
+## What a reading looks like
+
+A birth of 1988-09-05 00:50 in Seoul. Three corrections stack up before a single pillar is named — and each one changes the answer.
+
+```
+입력   1988-09-05 00:50  서울
+
+       KDT (UTC+10)          →  표준시 23:50, 전날
+       경도 126.978°E −32분   →  진태양시 23:18
+       23시대 + 야자시 정책   →  일주는 9월 4일 유지, 시두만 익일 기준
+
+명식   時    日    月    年
+       壬    壬    庚    戊
+       子    戌    申    辰
+```
+
+Drop any one of those corrections and you get a different chart. This case is in the test suite as `PublishedCaseTests.case1988Sept`, matched against a published almanac.
 
 > [!NOTE]
-> Screenshots are added with the first tagged release. Build from source to see the app today.
+> App screenshots are added with the first tagged release. Build from source to see it today.
 
 ## Features
 
