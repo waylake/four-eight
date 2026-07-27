@@ -175,7 +175,7 @@ struct PillarsGoldenTests {
     @Test("룰 엔진 — 번들 로드와 섹션 구성")
     func ruleEngine() throws {
         let ruleSet = try RuleSet.bundled()
-        #expect(ruleSet.rules.count == 60)
+        #expect(ruleSet.rules.count == 108)
         let chart = try PillarsEngine.chart(for: BirthInput(
             year: 2003, month: 2, day: 22, hour: 13, minute: 13, gender: .male
         ))
