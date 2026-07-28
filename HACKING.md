@@ -24,9 +24,12 @@ four-eight/
 │   │   ├── Interpretation/  FactExtractor, RuleSet
 │   │   └── Resources/    rules.json (해석 규칙 60개)
 │   └── Tests/
+├── RemoteLLM/            OpenAI 호환 전송 층 (독립 패키지, Foundation만)
+│   ├── Sources/RemoteLLM/  Endpoint, Destination, SSE, ChatClient, ProviderError
+│   └── Tests/            Fixtures/에 실제 제공자 응답 골든 데이터
 ├── App/FourEight/        SwiftUI 앱
 │   ├── Models/           Person, ModelCatalog
-│   ├── Services/         SajuService, ModelManager, Interpreter
+│   ├── Services/         SajuService, Writers, Interpreter, Counselor, Secrets
 │   ├── Views/            화면
 │   └── Resources/
 ├── scripts/              코드 생성기
@@ -36,16 +39,27 @@ four-eight/
 
 `FourEight.xcodeproj`는 생성물이며 커밋하지 않습니다.
 
-## 엔진만 다루기
+## 패키지만 다루기
 
-앱을 빌드하지 않고도 엔진 작업이 가능합니다. Xcode 없이 됩니다.
+앱을 빌드하지 않고도 두 패키지 작업이 가능합니다. Xcode 없이 됩니다.
 
 ```bash
-cd SajuKit
+cd SajuKit                 # 명리 엔진
 swift build
 swift test
 swift test --filter PublishedCaseTests
+
+cd RemoteLLM               # 원격 전송 층
+swift test
 ```
+
+`RemoteLLM`을 앱 타깃이 아니라 별도 패키지로 둔 이유는 테스트입니다. 이 층에서
+틀리기 쉬운 것들(SSE 줄 경계, 멀티바이트 분할, 오류 매핑, 키 유출)은 Xcode
+없이 `swift test`로 고정되어야 합니다. 앱 타깃에 두면 그 방법이 사라집니다.
+
+`Tests/RemoteLLMTests/Fixtures/*.sse`는 실제 제공자가 보낸 바이트입니다.
+**편집하지 마십시오.** 편집하면 그 검사가 증명하는 것이 사라지고, 테스트가
+CR 유입까지 검사합니다.
 
 ## 앱 빌드
 

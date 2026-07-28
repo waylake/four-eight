@@ -812,7 +812,9 @@ struct ConsultationDetail: View {
             "근거 \(String(evidence.count))개와 최근 발언 \(String(CounselBrief.recentTurnWindow))개만 봅니다",
         ]
         if let label = writers.label, aiOffered {
-            parts.append("\(label)이 씁니다")
+            // 조사를 붙이지 않는다. 모델 이름에 양자화 표기가 들어 있어서
+            // "Gemma 4 E2B · 4-bit이 씁니다"처럼 읽힌다.
+            parts.append("작성: \(label)")
         }
         parts.append("사람도 치료도 아닙니다")
         return parts.joined(separator: " · ")

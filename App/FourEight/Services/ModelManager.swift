@@ -44,7 +44,7 @@ final class ModelManager {
 
     /// 완료된 다운로드 기록 (UserDefaults).
     private var installedIDs: Set<String> {
-        get { Set(UserDefaults.standard.stringArray(forKey: "installedModels") ?? []) }
+        get { capturedInstalled ?? Set(UserDefaults.standard.stringArray(forKey: "installedModels") ?? []) }
         set { UserDefaults.standard.set(Array(newValue), forKey: "installedModels") }
     }
 
@@ -56,6 +56,23 @@ final class ModelManager {
             // 0.1.x 키 이름. 한 번 옮겨 오면 사용자는 선택을 잃지 않는다.
             ?? UserDefaults.standard.string(forKey: "activeModel")
     }
+
+    /// 스크린샷 캡처용. **UserDefaults를 건드리지 않는다.**
+    ///
+    /// 캡처가 사용자 설정을 바꾸면 안 되고, 그렇다고 모델이 없는 상태로
+    /// 찍으면 대표 이미지가 스스로 모순된다 — 풀이에는 모델 이름이 적혀
+    /// 있는데 컴포저에는 "모델을 고르지 않았습니다"가 뜬다.
+    func seedForCapture() {
+        guard let model = ModelCatalog.models.first(where: \.recommended)
+            ?? ModelCatalog.models.first
+        else { return }
+        preferredModelID = model.id
+        states[model.id] = .installed
+        capturedInstalled = [model.id]
+    }
+
+    /// 캡처에서만 채운다. 비어 있으면 UserDefaults를 본다.
+    private var capturedInstalled: Set<String>?
 
     var preferredModel: CatalogModel? {
         ModelCatalog.models.first { $0.id == preferredModelID }

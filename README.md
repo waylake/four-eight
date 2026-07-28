@@ -153,6 +153,8 @@ The reading is always assembled from rule source text; AI prose is an optional l
 | On this Mac (Ollama, LM Studio, … on `localhost`) | No — it is loopback | That server running locally |
 | Off this Mac (any OpenAI-compatible provider) | **Yes** | Base URL, model name, API key |
 
+**No output token cap is sent by default.** Reasoning models (DeepSeek, o-series, Gemini, …) spend that budget on thinking *and* the answer, so a low cap makes the model think itself out of room and return nothing while still billing you. The same model also varies up to 32× in output limit depending on which upstream route serves it, so there is no correct number for the app to pick. Set one in Settings if you want to bound cost.
+
 Pick the third and the app shows you **the literal text it is about to send, before it sends it.** Not a checkbox — the actual bytes. It asks once per host: asking every time teaches people to click without reading, and at that point the gate is worse than no gate.
 
 It does not ask for the second case. Loopback traffic never leaves the machine, so there is nothing to disclose, and warning there would drain the warning of meaning where it actually matters.

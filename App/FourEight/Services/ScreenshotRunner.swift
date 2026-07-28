@@ -61,6 +61,11 @@ enum ScreenshotRunner {
         state.selectedPersonID = demoPerson.id
         state.options = .default
         let modelManager = ModelManager()
+        // 모델이 선택된 상태로 둔다. 그렇지 않으면 대표 이미지가 스스로
+        // 모순된다 — 풀이 하단에는 "Gemma 4 E2B가 썼다"고 적혀 있는데
+        // 컴포저에는 "쓸 모델을 아직 고르지 않았습니다"가 뜬다.
+        // 메모리에만 반영하고 사용자 설정은 건드리지 않는다.
+        modelManager.seedForCapture()
         // 캡처는 사용자의 제공자 설정을 읽지 않는다. 빈 UserDefaults를 준다.
         let remoteProvider = RemoteProviderStore(
             defaults: UserDefaults(suiteName: "com.waylake.FourEight.capture") ?? .standard
