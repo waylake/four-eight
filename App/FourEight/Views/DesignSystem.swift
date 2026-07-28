@@ -42,6 +42,25 @@ enum Ink {
     }
 }
 
+/// 치수 토큰.
+enum Measure {
+    /// 읽기 열의 최대 폭. 좌우 패딩 18을 포함한다.
+    ///
+    /// 본문 524pt ≈ 한글 40 글리프다. WCAG 2.2 SC 1.4.8의 상한이
+    /// "80 characters or glyphs (**40 if CJK**)"이고, 근거는 CJK 글자가
+    /// 라틴 글자의 약 두 배 폭이라는 것이다.
+    ///
+    /// 세 계산이 같은 값으로 수렴해서 고른 값이다.
+    /// - 한글 40 글리프 × 13pt(`.body`, 전각) = 520pt
+    /// - 라틴 80자 × 약 0.5em × 13pt = 520pt
+    /// - ChatGPT의 실측 `--thread-content-max-width: 40rem` = 40em × 13pt = 520pt
+    ///
+    /// 고치기 전 상담 화면은 본문이 632pt ≈ 48.6 글리프로 상한을 21%
+    /// 넘었다. 눈으로 고른 값이 아니라 재서 나온 값이다.
+    /// 근거는 docs/research/consultation-ux.md.
+    static let reading: CGFloat = 560
+}
+
 extension Font {
     /// 한자 전용 명조 활자. AppleMyungjo가 없으면 시스템 세리프로.
     static func hanja(size: CGFloat) -> Font {

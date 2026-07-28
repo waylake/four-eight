@@ -152,6 +152,10 @@ struct NewConsultationPane: View {
     @State private var chosenTopic: ConsultationTopic?
     @State private var crisis: [String]?
     @State private var needsTopicChoice = false
+    /// 자동 포커스. 없으면 첫 풀이까지 클릭 다섯 번 중 두 번이 포커스에만
+    /// 쓰인다. 반참여 설계가 아니라 그냥 마찰이었다.
+    @FocusState private var editorFocused: Bool
+    @State private var showsUnavailable = false
 
     private var timeFacts: FactSet {
         SajuService.fortune(on: Date(), reading: reading).facts
@@ -164,6 +168,14 @@ struct NewConsultationPane: View {
     }
 
     var body: some View {
+        // 세로 가운데 정렬은 시도했다가 되돌렸다. `Spacer`는 ScrollView 안에서
+        // 늘어나지 않고(높이가 무한이라 늘어날 대상이 없다),
+        // `containerRelativeFrame(.vertical)`은 캡처 경로에서 높이를 0으로
+        // 계산해 **화면이 통째로 비었다.** 스크린샷이 그것을 잡았다.
+        //
+        // 대신 위 여백을 넉넉히 준다. 내용을 줄인 것(잔글씨 네 줄 → 두 줄,
+        // 칩에서 축 문자열 제거)이 이미 위쪽 쏠림을 줄였으므로, 여기서
+        // 검증할 수 없는 구조를 쓸 이유가 없다.
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
@@ -171,16 +183,19 @@ struct NewConsultationPane: View {
                     CrisisCard(matched: crisis) { self.crisis = nil }
                 } else {
                     editor
-                    if needsTopicChoice { topicChooser }
-                    topicOverview
+                    if needsTopicChoice { routingFailed }
+                    axisPicker
                 }
                 groundingNote
             }
-            .padding(20)
-            .frame(maxWidth: 720, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 44)
+            .padding(.bottom, 20)
+            .frame(maxWidth: Measure.reading, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .background(.background)
+        .defaultFocus($editorFocused, true)
     }
 
     private var header: some View {
@@ -197,6 +212,7 @@ struct NewConsultationPane: View {
         VStack(alignment: .leading, spacing: 8) {
             TextEditor(text: $concern)
                 .font(.body)
+                .focused($editorFocused)
                 .frame(minHeight: 108)
                 .padding(8)
                 .background(Ink.paper, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -221,67 +237,98 @@ struct NewConsultationPane: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("상담 열기") { open() }
+                // 단축키를 라벨에 적는다. 예전에는 ⌘Return이 있었지만
+                // `.help`에도 없어서 완전히 비가시였다. 실제 실패는 단축키가
+                // 없는 것이 아니라 숨어 있는 것이었다.
+                Button("상담 열기  ⌘↩") { open() }
                     .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.borderedProminent)
                     .disabled(concern.trimmingCharacters(in: .whitespacesAndNewlines).count < 4)
             }
         }
     }
 
-    /// 라우팅이 실패했을 때. 아무 축이나 골라 답하지 않고 사용자에게 묻는다.
-    private var topicChooser: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// 라우팅이 실패했을 때 덧붙이는 말. 축 선택 자체는 항상 아래에 있다.
+    private var routingFailed: some View {
+        VStack(alignment: .leading, spacing: 4) {
             Label("어떤 축으로 읽을지 정하지 못했습니다", systemImage: "questionmark.circle")
                 .font(.callout)
-            Text("적어 주신 글에서 명리 축을 찾지 못했습니다. 짐작으로 고르면 엉뚱한 근거로 답하게 되므로, 직접 골라 주시면 그 축으로 읽겠습니다.")
+            Text("적어 주신 글에서 명리 축을 찾지 못했습니다. 짐작으로 고르면 엉뚱한 근거로 답하게 되므로, 아래에서 직접 골라 주시면 그 축으로 읽겠습니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Ink.cinnabar.opacity(0.06), in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    /// 이 명식에서 이야기할 수 있는 축. **누를 수 있다.**
+    ///
+    /// 예전에는 같은 목록이 두 벌 있었다 — 항상 보이는 비활성 라벨과,
+    /// 라우팅이 실패한 뒤에만 나타나는 버튼. 화면에서 가장 버튼처럼 생긴
+    /// 여섯 개가 눌리지 않았고, 그것을 §6("모른다는 품질 기준")으로 둘 수는
+    /// 없다. §6이 막는 것은 답할 수 없는 것을 권하는 일이고, 답할 수 있는
+    /// 것을 누르지 못하게 하는 일이 아니다.
+    ///
+    /// 누르면 축만 정하고 상담을 열지는 않는다. 고민 원문은 여전히
+    /// 사용자의 말이어야 한다.
+    private var axisPicker: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("축을 먼저 골라 두셔도 됩니다")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             FlowChips {
                 ForEach(availableTopics) { topic in
+                    let picked = chosenTopic == topic
                     Button {
-                        chosenTopic = topic
+                        // 다시 누르면 해제. 라우팅에 맡기겠다는 뜻이다.
+                        chosenTopic = picked ? nil : topic
                         needsTopicChoice = false
-                        open()
+                        editorFocused = true
                     } label: {
                         Text(topic.title)
                             .font(.caption)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(.quaternary.opacity(0.5), in: Capsule())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                picked ? AnyShapeStyle(Ink.cinnabar.opacity(0.16))
+                                       : AnyShapeStyle(.quaternary.opacity(0.4)),
+                                in: Capsule()
+                            )
+                            .overlay(
+                                Capsule().strokeBorder(
+                                    picked ? Ink.cinnabar.opacity(0.55) : .clear, lineWidth: 1
+                                )
+                            )
+                            .foregroundStyle(picked ? Ink.cinnabar : .primary)
                     }
                     .buttonStyle(.plain)
+                    // 축 문자열은 칩에 넣지 않는다. 정보 둘을 담으면 폭이
+                    // 커져 여섯 개가 두 줄로 깨진다.
+                    .help("\(topic.title) — \(topic.axis)로 읽습니다")
                 }
             }
+            unavailableNote
         }
-        .padding(12)
-        .background(Ink.cinnabar.opacity(0.06), in: RoundedRectangle(cornerRadius: 9))
     }
 
-    /// 이 명식에서 실제로 이야기할 수 있는 축.
-    /// 답할 수 없는 주제를 권하지 않는 것이 정직하다.
-    private var topicOverview: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("이 명식에서 이야기할 수 있는 축")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-            FlowChips {
-                ForEach(availableTopics) { topic in
-                    HStack(spacing: 4) {
-                        Text(topic.title)
-                        Text(topic.axis)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .font(.caption2)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(.quaternary.opacity(0.4), in: Capsule())
-                }
-            }
-            let missing = Set(ConsultationTopic.allCases).subtracting(availableTopics)
-            if !missing.isEmpty {
-                Text("이 명식에는 \(missing.map(\.title).sorted().joined(separator: ", ")) 쪽 근거가 성립하지 않아 권하지 않습니다.")
+    /// 권하지 않는 축. 접어 둔다 — 첫 화면의 아래 절반을 잔글씨로 채우던 것이다.
+    @ViewBuilder
+    private var unavailableNote: some View {
+        let missing = Set(ConsultationTopic.allCases).subtracting(availableTopics)
+        if !missing.isEmpty {
+            DisclosureGroup(isExpanded: $showsUnavailable) {
+                // "이 명식에는"이라고 적으면 사실이 아니다. availableTopics는
+                // 오늘의 일진(timeFacts)까지 보고 계산하므로 이 목록은
+                // 날짜에 따라 바뀐다.
+                Text("지금 이 명식과 오늘의 기운으로는 \(missing.map(\.title).sorted().joined(separator: ", ")) 쪽 근거가 성립하지 않습니다. 없는 근거로 답하지 않기 때문에 권하지 않습니다.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            } label: {
+                Text("권하지 않는 축 \(String(missing.count))개")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
         }
     }
@@ -302,15 +349,18 @@ struct NewConsultationPane: View {
         }
     }
 
+    /// 시작 전에 알아야 하는 것. **두 줄이다.**
+    ///
+    /// 예전에는 카드 안에 카드가 들어 있고 잔글씨가 네 줄이어서, 첫 화면의
+    /// 아래 절반이 회색 글씨였다. 같은 내용을 여러 겹으로 적는 것은
+    /// 보여주는 것이 아니라 채우는 것이다.
     private var groundingNote: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 7) {
                 Image(systemName: "checkmark.seal")
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("이 상담은 계산된 명식과 근거 규칙만 봅니다")
-                        .font(.caption)
-                    Text("근거에 없는 것은 지어내지 않고 모른다고 답합니다. 답변마다 어떤 규칙에서 나왔는지 표시됩니다.")
+                    Text("계산된 명식과 근거 규칙만 봅니다. 근거에 없는 것은 지어내지 않고 모른다고 답하며, 답변마다 어떤 규칙에서 나왔는지 표시됩니다.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     // 이 문장은 **상태에서 나온다.**
@@ -325,12 +375,9 @@ struct NewConsultationPane: View {
                         .foregroundStyle(writers.plannedToLeaveMachine ? Ink.cinnabar : .secondary)
                 }
             }
-            Divider()
             AIDisclosure()
         }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
     }
 
     /// 상담을 연다. 모델은 부르지 않는다.
@@ -408,14 +455,27 @@ struct NewConsultationPane: View {
 ///
 /// 출처와 조문은 docs/research/consultation-safety.md에 있다.
 struct AIDisclosure: View {
+    @Environment(Writers.self) private var writers
+
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "cpu")
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: writers.plannedToLeaveMachine ? "arrow.up.forward.square" : "cpu")
                 .foregroundStyle(.secondary)
-            Text("풀이는 이 Mac에서 돌아가는 AI 모델이 씁니다. 사람이 아니고, 심리 상담이나 치료가 아니며, 면허 있는 전문가의 도움을 대체하지 않습니다.")
+            // "이 Mac에서 돌아가는"이 고정 문자열이었다. 원격 제공자를
+            // 지정하면 거짓이 되고, 거짓일 때가 하필 사용자가 알아야 하는
+            // 경우다. 어디서 쓰는지는 설정에서 읽는다.
+            Text("\(writerPhrase) 사람이 아니고, 심리 상담이나 치료가 아니며, 면허 있는 전문가의 도움을 대체하지 않습니다.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
+        }
+    }
+
+    private var writerPhrase: String {
+        switch writers.plannedDestination {
+        case .inProcess: "풀이는 이 Mac에서 돌아가는 AI 모델이 씁니다."
+        case .onMachine(let host): "풀이는 이 Mac에서 도는 \(host)의 AI 모델이 씁니다."
+        case .offMachine(let host): "풀이는 \(host)의 AI 모델이 씁니다."
         }
     }
 }
@@ -514,7 +574,17 @@ struct ConsultationDetail: View {
     var body: some View {
         VStack(spacing: 0) {
             transcript
+                // 근거 머리를 스크롤 밖에 고정한다.
+                //
+                // §6-2("근거는 답 뒤가 아니라 답 앞에")를 스크롤 컨테이너
+                // 맨 위에 두는 것으로 구현해 두었는데, 그러면 턴이 뷰포트를
+                // 넘어가는 순간(사실상 두 번째 답변부터) 근거가 화면에서
+                // 사라진다. NN/g가 그 행동을 "apple picking"으로 측정했다 —
+                // 사용자는 앞선 답변을 보려고 계속 위로 스크롤한다.
+                // 고정하는 것이 6-2를 약화시키는 게 아니라 첫 정직한 구현이다.
+                .safeAreaInset(edge: .top, spacing: 0) { pinnedHeader }
             Divider()
+            contextNote
             if let followUpCrisis {
                 // 기록을 남기지 않는다. 위기의 순간이 목록에 남아 있는 것은
                 // 도움이 되지 않고, 사용자가 저장을 요청한 것도 아니다.
@@ -583,65 +653,77 @@ struct ConsultationDetail: View {
     // MARK: 기록
 
     private var transcript: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    axisHeader
-                    concernCard
-                    ForEach(consultation.turns) { turn in
-                        TurnBubble(
-                            turn: turn,
-                            // 발언 자신의 기록을 먼저 본다. 상담 단위 값만
-                            // 보면 마지막 값이 모든 답변에 붙어, 이 Mac에서
-                            // 쓴 답변이 원격에서 쓴 것으로 표시된다.
-                            provenance: turn.speaker == .counselor
-                                ? (turn.provenance ?? consultation.provenance) : nil,
-                            evidence: turn.speaker == .counselor ? evidence : [],
-                            onRule: { selectedRule = $0 }
-                        )
-                        .id(turn.id)
-                    }
-                    if case .failed(let message) = phase {
-                        Label(message, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(Ink.cinnabar)
-                    }
-                    contextNote
-                    Color.clear.frame(height: 1).id("bottom")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                concernCard
+                ForEach(consultation.turns) { turn in
+                    TurnBubble(
+                        turn: turn,
+                        // 발언 자신의 기록을 먼저 본다. 상담 단위 값만
+                        // 보면 마지막 값이 모든 답변에 붙어, 이 Mac에서
+                        // 쓴 답변이 원격에서 쓴 것으로 표시된다.
+                        provenance: turn.speaker == .counselor
+                            ? (turn.provenance ?? consultation.provenance) : nil,
+                        // **그 발언이 실제로 쓴** 근거다. 상담 수준 값을
+                        // 넘기면 축을 바꾼 뒤 이전 답변이 쓰지 않은 규칙을
+                        // 인용하게 된다.
+                        evidence: turn.speaker == .counselor ? rules(for: turn.evidenceIDs) : [],
+                        isLast: turn.id == consultation.turns.last?.id,
+                        canRegenerate: aiOffered && phase != .writing,
+                        onRule: { selectedRule = $0 },
+                        onRegenerate: { requestAnswer(regenerating: true) }
+                    )
+                    .id(turn.id)
                 }
-                .padding(18)
-                .frame(maxWidth: 760, alignment: .leading)
-            }
-            .onChange(of: consultation.turns.last?.text) {
-                withAnimation(.easeOut(duration: 0.15)) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+                if case .failed(let message) = phase {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(Ink.cinnabar)
+                        .textSelection(.enabled)
                 }
             }
+            .padding(18)
+            .frame(maxWidth: Measure.reading, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
+        // 청크마다 애니메이션 스크롤을 새로 시작하면 화면이 흔들린다.
+        // 그리고 예전 센티넬은 고지문 아래에 있어서, 30초 동안 뷰포트
+        // 하단에 고정되는 것이 자라는 문장이 아니라 잔글씨였다.
+        //
+        // 역할을 나눠 준다. `.bottom` 하나만 주면 기록이 뷰포트보다 짧을 때
+        // 내용이 아래로 붙고 고정 머리 밑에 빈 구멍이 생긴다.
+        // 정렬은 위, 크기 변화는 아래 — 짧으면 위에서 시작하고 자라면 따라간다.
+        .defaultScrollAnchor(.top, for: .alignment)
+        .defaultScrollAnchor(.bottom, for: .sizeChanges)
     }
 
-    /// 무엇을 어떤 축으로 읽고 있는지, 왜 그렇게 읽었는지.
-    private var axisHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// 근거 ID를 규칙으로. 없는 ID는 조용히 빠진다 — 근거 판이 올라가
+    /// 규칙이 사라졌을 수 있고, 그때 화면이 비는 것이 맞다.
+    private func rules(for ids: [String]) -> [Rule] {
+        let wanted = Set(ids)
+        return SajuService.ruleSet.rules.filter { wanted.contains($0.id) }
+    }
+
+    /// 이 상담이 쓰는 축과 근거. 스크롤과 무관하게 항상 보인다.
+    private var pinnedHeader: some View {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
+                // 이 화면에서 결과를 가장 크게 바꾸는 조작이다(축을 바꾸면
+                // 근거 전체가 바뀐다). 예전에는 11pt 텍스트 + 8pt 시브론의
+                // 테두리 없는 메뉴였다.
                 Menu {
-                    ForEach(
-                        ConsultationRouter.availableTopics(
-                            facts: reading.facts, ruleSet: SajuService.ruleSet
-                        )
-                    ) { topic in
+                    ForEach(menuTopics) { topic in
                         Button(topic.title) { retopic(to: topic) }
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(consultation.topic.title)
-                        Image(systemName: "chevron.down").font(.system(size: 8))
-                    }
-                    .font(.caption.weight(.medium))
+                    Text("축: \(consultation.topic.title)")
+                        .font(.caption.weight(.medium))
                 }
                 .menuStyle(.borderlessButton)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .fixedSize()
-                .help("축을 바꾸면 근거가 함께 바뀝니다")
+                .help("\(consultation.topic.axis)로 읽습니다. 축을 바꾸면 이후 풀이의 근거가 바뀝니다 — 이미 받은 답변은 자기 근거를 그대로 유지합니다.")
 
                 Text(consultation.topic.axis)
                     .font(.caption2)
@@ -655,39 +737,42 @@ struct ConsultationDetail: View {
                         .font(.caption2)
                 }
                 .toggleStyle(.switch)
-                .controlSize(.mini)
-            }
-
-            if !consultation.matchedTerms.isEmpty {
-                Text("‘\(consultation.matchedTerms.joined(separator: "’, ‘"))’를 보고 이 축으로 읽었습니다.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                .controlSize(.small)
             }
 
             // 이 상담이 쓰는 근거. 답을 받기 전에 미리 볼 수 있다.
-            FlowChips {
-                ForEach(evidence) { rule in
-                    Button { selectedRule = rule } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "text.magnifyingglass").font(.system(size: 9))
-                            Text(rule.title)
-                        }
-                        .font(.caption2)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(.quaternary.opacity(0.5), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                }
-            }
+            EvidenceChips(rules: evidence, onRule: { selectedRule = $0 })
         }
-        .padding(12)
-        .background(.quaternary.opacity(0.22), in: RoundedRectangle(cornerRadius: 9))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 9)
+        .frame(maxWidth: Measure.reading, alignment: .leading)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
+    /// 축 메뉴에 실제로 고를 수 있는 축.
+    ///
+    /// `timeFacts`를 넘긴다. 예전에는 명식 사실만 넘겼고, 그래서 시간
+    /// 근거로 성립하는 축(`.timing`, `.movement`)이 메뉴에서 사라지거나
+    /// 골랐을 때 근거가 비었다. 오늘 기운을 켜 둔 상담이면 그 근거까지 본다.
+    private var menuTopics: [ConsultationTopic] {
+        ConsultationRouter.availableTopics(
+            facts: reading.facts,
+            timeFacts: consultation.includesToday ? todayFacts : nil,
+            ruleSet: SajuService.ruleSet
+        )
+    }
+
+    private var todayFacts: FactSet {
+        SajuService.fortune(on: Date(), reading: reading).facts
+    }
+
+    /// 사용자가 처음 적은 고민. **사용자의 말은 한 모습이어야 한다.**
+    /// 예전에는 최초 고민만 전폭 종이 카드였고 이후 발언은 우측 말풍선이라,
+    /// 같은 사람의 말이 두 모습이었다.
     private var concernCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .trailing, spacing: 3) {
             Text("적어 주신 고민")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -695,25 +780,42 @@ struct ConsultationDetail: View {
                 .font(.body)
                 .lineSpacing(3)
                 .textSelection(.enabled)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 10)
+                .background(Ink.cinnabar.opacity(0.09), in: RoundedRectangle(cornerRadius: 13))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .paperCard(padding: 12)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.leading, 44)
     }
 
-    /// 무엇을 보고 있고 무엇을 기억하지 않는지.
-    /// 기억하는 척하지 않는 것이 4B 모델을 쓰는 앱의 정직함이다.
+    /// 무엇을 보고 있고 무엇을 기억하지 않는지. **한 줄이다.**
+    ///
+    /// 예전에는 이 고지가 읽는 열 안에 잔글씨 세 줄로 상주했고, 스크롤
+    /// 센티넬이 그 아래에 있어서 스트리밍 중 뷰포트 하단에 고정되는 것이
+    /// 자라는 문장이 아니라 이 글이었다. 항상 보이므로 규제 요구(EU AI Act
+    /// Art 50(1), Utah 13-72a-203)는 그대로 만족한다 — 위치만 바뀌었다.
+    ///
+    /// 숫자는 계속 코드에서 읽는다. 손으로 적으면 창 값이 바뀔 때 어긋난다.
     private var contextNote: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("이 상담은 근거 \(evidence.count)개와 최근 발언 \(CounselBrief.recentTurnWindow)개를 봅니다.")
-                Text("그 밖의 것은 기억하지 않습니다. 턴이 길어지면 근거에서 멀어지므로, 다른 고민은 새 상담으로 여는 편이 정확합니다.")
-            }
+        Text(contextLine)
             .font(.caption2)
             .foregroundStyle(.tertiary)
-            AIDisclosure()
+            .lineLimit(2)
+            .padding(.horizontal, 18)
+            .padding(.top, 7)
+            .frame(maxWidth: Measure.reading, alignment: .leading)
+            .frame(maxWidth: .infinity)
+    }
+
+    private var contextLine: String {
+        var parts = [
+            "근거 \(String(evidence.count))개와 최근 발언 \(String(CounselBrief.recentTurnWindow))개만 봅니다",
+        ]
+        if let label = writers.label, aiOffered {
+            parts.append("\(label)이 씁니다")
         }
-        .padding(.top, 4)
+        parts.append("사람도 치료도 아닙니다")
+        return parts.joined(separator: " · ")
     }
 
     // MARK: 입력
@@ -721,8 +823,21 @@ struct ConsultationDetail: View {
     @ViewBuilder
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if consultation.counselorTurnCount >= 4 {
-                HStack(spacing: 6) {
+            // 알림은 한 줄, 하나만. 우선순위는 "쓸 곳이 없다" > "길어졌다".
+            // 예전에는 두 블록이 세로로 쌓여 컴포저를 밀어 올렸다.
+            if !aiOffered {
+                HStack(spacing: 7) {
+                    Image(systemName: "wand.and.stars")
+                    Text(writers.problem ?? "풀이를 받으려면 설정에서 쓸 곳을 고르세요. 축과 근거는 이미 정해져 있어 그대로 남습니다.")
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                    SettingsLink { Text("설정") }
+                        .controlSize(.small)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else if consultation.counselorTurnCount >= 4 {
+                HStack(spacing: 7) {
                     Image(systemName: "info.circle")
                     Text("이 상담이 길어졌습니다. 새 고민은 새 상담으로 여시면 근거가 더 정확합니다.")
                     Spacer(minLength: 0)
@@ -731,24 +846,6 @@ struct ConsultationDetail: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            }
-
-            if !aiOffered {
-                HStack(spacing: 8) {
-                    Image(systemName: "wand.and.stars")
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("풀이를 받으려면 모델을 고르세요")
-                            .font(.callout)
-                        Text("설정 → 모델에서 Gemma 4를 내려받으면 이 근거로 풀이를 씁니다. 축과 근거는 이미 정해져 있으므로 그대로 남습니다.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                    SettingsLink { Text("설정") }
-                        .controlSize(.small)
-                }
-                .padding(10)
-                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
             }
 
             HStack(alignment: .bottom, spacing: 10) {
@@ -789,50 +886,68 @@ struct ConsultationDetail: View {
             Button {
                 store.stop(id: consultation.id)
             } label: {
-                Label("중단", systemImage: "stop.fill")
+                Label("중단  ⌘.", systemImage: "stop.fill")
             }
+            .keyboardShortcut(".", modifiers: .command)
             .help("쓰던 문장은 남습니다.")
         case .idle, .stopped, .failed:
             HStack(spacing: 6) {
-                // 덧붙이는 말만 남기는 것도 하나의 행위다. 모델을 부르지 않는다.
-                if !followUp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // "적어만 두기"를 메뉴로 내렸다. 예전에는 입력이 비면
+                // 사라지는 버튼이어서, 타이핑을 시작하면 버튼이 늘어나
+                // 레이아웃이 움직였다. 그리고 주 버튼이 둘이면 주 버튼이 없다.
+                Menu {
                     Button("적어만 두기") {
                         store.addPersonTurn(followUp, to: consultation.id)
                         followUp = ""
                     }
-                    .controlSize(.small)
+                    .disabled(followUp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .help("모델을 부르지 않고 사정만 기록합니다.")
+                    Divider()
+                    Button("이 상담 내보내기…") { isExporting = true }
+                } label: {
+                    Image(systemName: "ellipsis")
                 }
+                .menuStyle(.borderlessButton)
+                .controlSize(.small)
+                .fixedSize()
+
                 if aiOffered {
                     Button {
                         requestAnswer()
                     } label: {
-                        Label(
-                            consultation.awaitsFirstAnswer ? "풀이 받기" : "이어 묻기",
-                            systemImage: "wand.and.stars"
-                        )
+                        // 매직 완드를 뺐다. NN/g의 프롬프트 컨트롤 지침이
+                        // "labeled, standard icons (not enigmatic symbols
+                        // like magic wands)"라며 정확히 이 아이콘을 예시로
+                        // 지목한다.
+                        Text((consultation.awaitsFirstAnswer ? "풀이 받기" : "이어 묻기") + "  ⌘↩")
                     }
                     .keyboardShortcut(.return, modifiers: .command)
+                    .buttonStyle(.borderedProminent)
                     .help(answerHelp)
                 }
             }
         }
     }
 
+    /// 축을 바꾼다. **시간 근거를 함께 넘긴다.**
+    ///
+    /// 예전에는 명식 사실만 넘겨서, `.timing`을 고르면 근거가 대운 하나로
+    /// 줄고 시간 근거로만 성립하던 축은 근거가 비었다.
     private func retopic(to topic: ConsultationTopic) {
-        let evidence = ConsultationRouter.evidence(
-            for: topic, facts: reading.facts, ruleSet: SajuService.ruleSet
+        let picked = ConsultationRouter.evidence(
+            for: topic,
+            facts: reading.facts,
+            timeFacts: consultation.includesToday ? todayFacts : nil,
+            ruleSet: SajuService.ruleSet
         )
-        store.retopic(consultation.id, topic: topic, evidenceIDs: evidence.map(\.id))
+        store.retopic(consultation.id, topic: topic, evidenceIDs: picked.map(\.id))
     }
 
     /// 이 턴에 쓸 재료. 결정론적으로 이미 다 정해져 있다.
     private var brief: CounselBrief {
         CounselBrief(
             facts: reading.facts.summaryLines,
-            todayFacts: consultation.includesToday
-                ? SajuService.fortune(on: Date(), reading: reading).facts.summaryLines
-                : nil,
+            todayFacts: consultation.includesToday ? todayFacts.summaryLines : nil,
             topic: consultation.topic,
             evidence: evidence
         )
@@ -853,8 +968,8 @@ struct ConsultationDetail: View {
     /// 순서가 중요하다 — 위기 표현이 담긴 글은 확인 화면에 띄워 보여줄
     /// 것도 아니고, 그 화면에서 사용자가 "보냅니다"를 누를 기회를 주는
     /// 것 자체가 잘못이다.
-    private func requestAnswer() {
-        let text = followUp.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func requestAnswer(regenerating: Bool = false) {
+        let text = regenerating ? "" : followUp.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // 안전 선별은 모델보다 먼저다. 처음 적은 고민만 검사하고 덧붙인
         // 말은 검사하지 않던 시절이 있었다. 로컬에서도 잘못이었지만,
@@ -865,7 +980,11 @@ struct ConsultationDetail: View {
         }
 
         let start = {
-            let outgoing = followUp
+            // 다시 쓰기는 **덮어쓰지 않는다.** 같은 근거로 새 답변을 아래에
+            // 붙이고 이전 답변은 그대로 남긴다. 사용자가 시간과 배터리를
+            // 들여 얻은 문장을 버튼 한 번으로 지우는 것은 이 저장소의
+            // 원칙에 어긋난다.
+            let outgoing = regenerating ? "" : followUp
             followUp = ""
             store.answer(id: consultation.id, followUp: outgoing, supplier: supplier)
         }
@@ -905,6 +1024,8 @@ struct ConsultationDetail: View {
         }
         out += "\n## 주고받은 말\n\n"
         for turn in consultation.turns {
+            // 답변마다 자기 근거를 적는다. 상담 수준 값을 쓰면 축을 바꾼 뒤
+            // 내보낸 기록이 그 답변이 쓰지 않은 규칙에 귀속시킨다.
             // 호칭에 "상담사"·"치료" 계열 말을 쓰지 않는다. 모델이 전문
             // 상담을 제공한다는 표현은 규제상으로도 사실로도 옳지 않다.
             let who = switch turn.speaker {
@@ -913,6 +1034,12 @@ struct ConsultationDetail: View {
             case .app: "앱이 확정한 말"
             }
             out += "**\(who)** — \(turn.text)\n\n"
+            if turn.speaker == .counselor, !turn.evidenceIDs.isEmpty {
+                out += "  근거: " + turn.evidenceIDs.map { "`\($0)`" }.joined(separator: ", ") + "\n\n"
+            }
+            if turn.speaker == .counselor, let p = turn.provenance {
+                out += "  작성: \(p.modelName) (\(p.resolvedDestination.label))\n\n"
+            }
         }
         out += "---\n\n이 기록은 참고용이며 의료·투자·법률 판단의 근거가 될 수 없습니다.\n"
         return out
@@ -925,14 +1052,22 @@ struct TurnBubble: View {
     let turn: Consultation.Turn
     let provenance: InterpretationStore.Provenance?
     let evidence: [Rule]
+    var isLast: Bool = false
+    var canRegenerate: Bool = false
     let onRule: (Rule) -> Void
+    var onRegenerate: () -> Void = {}
 
     var body: some View {
         switch turn.speaker {
         case .app:
-            // 앱이 결정론적으로 말한 것. 모델의 말과 다르게 보여야 한다.
-            HStack(alignment: .top, spacing: 8) {
+            // 앱이 결정론적으로 말한 것. 채워진 카드 대신 왼쪽 얇은 선으로
+            // 구분한다 — 그릇을 하나 줄이면 화면에서 경쟁하는 문법이 줄어든다.
+            HStack(alignment: .top, spacing: 9) {
+                Rectangle()
+                    .fill(.tertiary)
+                    .frame(width: 2)
                 Image(systemName: "text.book.closed")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(turn.text)
                     .font(.callout)
@@ -940,12 +1075,11 @@ struct TurnBubble: View {
                     .textSelection(.enabled)
                 Spacer(minLength: 0)
             }
-            .padding(11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.28), in: RoundedRectangle(cornerRadius: 9))
+            .fixedSize(horizontal: false, vertical: true)
+
         case .person:
             HStack {
-                Spacer(minLength: 56)
+                Spacer(minLength: 44)
                 Text(turn.text)
                     .font(.body)
                     .lineSpacing(3)
@@ -953,40 +1087,137 @@ struct TurnBubble: View {
                     .padding(.horizontal, 13)
                     .padding(.vertical, 10)
                     .background(
-                        Ink.cinnabar.opacity(0.11),
-                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        Ink.cinnabar.opacity(0.09),
+                        in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                     )
             }
+
         case .counselor:
-            VStack(alignment: .leading, spacing: 6) {
-                if turn.text.isEmpty && !turn.isComplete {
-                    HStack(spacing: 6) {
+            // 가장 길고 가장 많이 읽는 글이다. 예전에는 가장 갇힌 그릇에
+            // 있었다 — 테두리 카드 + 우측 40pt 들여쓰기 + 제목 없음 +
+            // 근거 칩 없음. 해석 화면의 `SectionCard`가 이미 "근거 있는
+            // 산문"을 그리는 문법을 갖고 있으므로 그것을 쓴다.
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 6) {
+                    Rectangle()
+                        .fill(Ink.cinnabar)
+                        .frame(width: 3, height: 13)
+                    Text("풀이")
+                        .font(.subheadline.weight(.semibold))
+                    if !turn.isComplete {
                         ProgressView().controlSize(.small).scaleEffect(0.7)
-                        Text("근거를 읽고 쓰는 중…")
+                        // 스피너에 라벨을 붙이지 말라는 지침과, 생성 중에는
+                        // 무슨 일이 일어나는지 구체적으로 알리라는 지침이
+                        // 어긋난다. 생성 화면에서는 후자를 택한다.
+                        Text("근거를 읽고 쓰는 중")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
-                } else {
+                    Spacer(minLength: 0)
+                }
+
+                if !turn.text.isEmpty {
                     Text(turn.text)
                         .font(.body)
                         .lineSpacing(4)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
                 if turn.isComplete {
-                    HStack(spacing: 6) {
-                        if let provenance {
-                            Text("\(provenance.modelName) · \(provenance.writtenAt.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer(minLength: 0)
-                    }
+                    // 배선만 되어 있고 렌더되지 않던 것. ADR 0010 §9의
+                    // 제목이 "답변에 근거 칩이 붙는다"인데 붙지 않았다.
+                    EvidenceChips(rules: evidence, onRule: onRule)
+                    footer
                 }
             }
-            .padding(13)
-            .paperCard(padding: 13)
-            .padding(.trailing, 40)
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            if let provenance {
+                HStack(spacing: 4) {
+                    Image(systemName: provenance.resolvedDestination.leavesMachine
+                        ? "arrow.up.forward.square" : "cpu")
+                    Text("\(provenance.modelName) · \(provenance.resolvedDestination.label) · \(provenance.writtenAt.formatted(date: .abbreviated, time: .shortened))")
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(turn.text, forType: .string)
+            } label: {
+                Label("복사", systemImage: "doc.on.doc")
+            }
+            .buttonStyle(.plain)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .help("이 풀이를 클립보드로 복사합니다.")
+
+            if isLast, canRegenerate {
+                Button(action: onRegenerate) {
+                    Label("다시 쓰기", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                // 덮어쓰지 않는다. 이전 답변은 그대로 남고 새 답변이
+                // 아래에 붙는다. 사용자가 배터리와 시간을 들여 얻은 문장을
+                // 버튼 한 번으로 조용히 지우는 것은 이 저장소의 원칙에
+                // 어긋난다 — 비용을 치른 것은 남긴다.
+                .help("같은 근거로 다시 씁니다. 지금 답변은 지우지 않고 그 아래에 새로 붙입니다.")
+            }
+        }
+    }
+}
+
+/// 근거 칩. 해석 화면과 같은 문법을 쓴다.
+///
+/// 캡슐 문법을 셋으로 나눈 결과다 — 축 칩(채워진 캡슐 + 선택 상태, 액션),
+/// 근거 칩(돋보기 + 외곽선, 정보 열기), 비활성 라벨(캡슐을 쓰지 않음).
+/// 예전에는 셋이 거의 같은 모양이어서 무엇이 눌리는지 알 수 없었다.
+struct EvidenceChips: View {
+    let rules: [Rule]
+    let onRule: (Rule) -> Void
+    /// 이 개수를 넘으면 접는다. 전부 표시하면 아무것도 표시하지 않은 것과 같다.
+    var visible: Int = 4
+    @State private var expanded = false
+
+    var body: some View {
+        if !rules.isEmpty {
+            let shown = expanded ? rules : Array(rules.prefix(visible))
+            FlowChips {
+                ForEach(shown) { rule in
+                    Button { onRule(rule) } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "text.magnifyingglass").font(.system(size: 9))
+                            Text(rule.title)
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .overlay(Capsule().strokeBorder(.separator, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help(rule.text)
+                }
+                if !expanded, rules.count > visible {
+                    Button { expanded = true } label: {
+                        Text("+\(String(rules.count - visible))")
+                            .font(.caption2.weight(.medium))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .overlay(Capsule().strokeBorder(.separator, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("근거 \(String(rules.count))개를 모두 봅니다")
+                }
+            }
         }
     }
 }

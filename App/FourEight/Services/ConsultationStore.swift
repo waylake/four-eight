@@ -54,6 +54,16 @@ final class ConsultationStore {
         consultations.append(contentsOf: loaded.filter { !known.contains($0.id) })
     }
 
+    /// 스크린샷 캡처용 주입. **디스크에 쓰지 않는다.**
+    ///
+    /// `open()`은 기록을 보관하므로 캡처에 쓸 수 없다 — 캡처가 사용자의
+    /// 보관 파일을 건드리면 안 된다. 대표 이미지에 답변이 있어야 하는데
+    /// 그러려면 완성된 턴이 필요하고, 그것을 만들 경로가 이것뿐이다.
+    func seedForCapture(_ seeded: [Consultation]) {
+        consultations = seeded
+        restoredPeople = Set(seeded.map(\.personID))
+    }
+
     // MARK: - 사용자의 행위
 
     /// 상담을 연다. **모델을 부르지 않는다.**

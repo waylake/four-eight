@@ -70,6 +70,14 @@ struct FourEightApp: App {
                 Button("상담") { appState.page = .consultation }
                     .keyboardShortcut("4", modifiers: .command)
                 Divider()
+                // 툴바 항목은 메뉴에도 있어야 한다. 사용자가 툴바를 숨길 수
+                // 있으므로 툴바가 유일한 자리가 될 수 없다는 것이 HIG의 요구다.
+                Button("새 상담") {
+                    appState.page = .consultation
+                    appState.selectedConsultationID = nil
+                }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                Divider()
                 Button("오늘로 이동") {
                     appState.selectedDate = nil
                     appState.visibleMonth = Date()
