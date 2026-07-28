@@ -52,23 +52,60 @@ git push origin v0.2.0
 
 ### 3. 초안을 확인한다
 
-워크플로가 초안 릴리스를 만듭니다. **반드시 내려받아 실행해 보십시오.**
+워크플로가 초안 릴리스를 만듭니다. **반드시 내려받아 실행해 보십시오.** 여기가 되돌릴 수 있는 마지막 지점입니다.
 
-- 앱이 열리는가
-- 설정 → 정보의 버전이 맞는가
-- 명식이 정상 계산되는가
+```bash
+mkdir -p /tmp/verify && cd /tmp/verify
+gh release download v0.2.0 --repo waylake/four-eight --pattern 'FourEight.zip'
+ditto -x -k FourEight.zip .
+
+lipo -archs FourEight.app/Contents/MacOS/FourEight            # arm64
+defaults read "$PWD/FourEight.app/Contents/Info.plist" CFBundleShortVersionString
+defaults read "$PWD/FourEight.app/Contents/Info.plist" CFBundleVersion
+codesign --verify --deep --strict FourEight.app
+
+xattr -dr com.apple.quarantine FourEight.app
+open -a "$PWD/FourEight.app"
+```
+
+앱이 열리는지, 버전이 맞는지, 명식이 정상 계산되는지 확인합니다.
 
 ### 4. 발행한다
 
-GitHub에서 초안 릴리스를 발행합니다. Publish 워크플로가 appcast를 GitHub Pages로 올립니다. 이 시점부터 기존 사용자에게 업데이트가 보입니다.
+GitHub에서 초안 릴리스를 발행합니다. Publish 워크플로가 appcast를 GitHub Pages로 올립니다. **이 시점부터 기존 사용자에게 업데이트가 보입니다.**
+
+발행 후 다음을 확인합니다. 특히 **서명 검증은 건너뛰지 마십시오** — 서명이 어긋나면 앱이 업데이트를 조용히 거부하고, 사용자는 새 버전이 있다는 사실조차 모릅니다.
+
+```bash
+# 피드가 application/xml로 서빙되는가
+curl -sI https://waylake.github.io/four-eight/appcast.xml | grep -iE 'HTTP/|content-type'
+
+# 피드의 서명이 실제 배포 자산과 맞는가
+SIG=$(curl -sL https://waylake.github.io/four-eight/appcast.xml \
+      | grep -o 'sparkle:edSignature="[^"]*"' | head -1 | sed 's/.*="//;s/"//')
+./bin/sign_update --verify /tmp/verify/FourEight.zip "$SIG" \
+                  --ed-key-file ~/.four-eight-secrets/sparkle-private-key.txt
+```
+
+`sign_update`는 [Sparkle 배포본](https://github.com/sparkle-project/Sparkle/releases)의 `bin/`에 있습니다.
 
 ### 5. cask를 갱신한다
 
+`sha256`은 Release 워크플로 실행 요약에 적혀 있습니다. 직접 계산하려면 `shasum -a 256 FourEight.zip`을 쓰십시오.
+
 ```bash
 git clone https://github.com/waylake/homebrew-tap.git ../homebrew-tap   # 최초 1회
-scripts/update-cask.sh 0.2.0 <릴리스 요약에 있는 sha256>
+scripts/update-cask.sh 0.2.0 <sha256>
 cd ../homebrew-tap && git add -A && git commit -m "four-eight 0.2.0" && git push
 ```
+
+확인:
+
+```bash
+brew update && brew info --cask waylake/tap/four-eight
+```
+
+경고 없이 새 버전이 보여야 합니다. Homebrew는 cask DSL을 자주 조이므로 여기서 deprecation 경고가 나올 수 있습니다.
 
 ## 문제가 생기면
 
@@ -81,6 +118,21 @@ git tag -d v0.2.0
 ```
 
 **발행 후라면** appcast에서 항목을 지우지 마십시오. 대신 고친 버전을 새 태그로 올립니다. 빌드 번호가 더 크므로 사용자는 자연히 그쪽으로 갑니다.
+
+## 걸리는 시간
+
+v0.1.0 실측입니다. GitHub 러너는 로컬 Apple Silicon보다 3~4배 느립니다.
+
+| 단계 | 시간 |
+|---|---|
+| 엔진 테스트 + 프로젝트 생성 | 약 2분 |
+| 릴리스 빌드 (캐시 없음) | 약 14분 |
+| 패키징·서명·appcast·초안 생성 | 1분 미만 |
+| Publish 워크플로 | 약 1분 |
+
+빌드 시간의 대부분은 의존성 컴파일입니다. MLX의 매크로가 swift-syntax를 끌어오는데, 이 패키지는 Swift 생태계에서 컴파일이 가장 느린 축입니다.
+
+`project.yml`이 바뀌지 않았다면 캐시가 적중해 훨씬 빨라집니다. 의존성을 바꾸면 캐시 키가 무효화되어 다시 14분대로 돌아갑니다. 그때는 정상입니다.
 
 ## 규칙
 

@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/waylake/four-eight/releases/latest"><img src="https://img.shields.io/github/v/release/waylake/four-eight?style=flat" alt="Release"></a>
   <a href="https://github.com/waylake/four-eight/actions/workflows/ci.yml"><img src="https://github.com/waylake/four-eight/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="#요구-사항"><img src="https://img.shields.io/badge/platform-macOS%2015%2B%20(Apple%20Silicon)-informational?style=flat" alt="Platform"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/waylake/four-eight?style=flat" alt="License"></a>

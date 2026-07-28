@@ -40,3 +40,4 @@
 | [0005](./0005-expose-school-differences-as-settings.md) | 유파 차이를 설정으로 드러낸다 | accepted |
 | [0006](./0006-generation-state-belongs-to-the-document.md) | 생성 상태는 뷰가 아니라 문서에 둔다 | accepted |
 | [0007](./0007-describe-days-do-not-rank-them.md) | 날을 서술하되 등급을 매기지 않는다 | accepted |
+| [0008](./0008-ship-arm64-only.md) | arm64 전용으로 배포한다 | accepted |
