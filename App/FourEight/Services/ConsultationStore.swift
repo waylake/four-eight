@@ -22,7 +22,7 @@ final class ConsultationStore {
     }
 
     /// 답변 재료를 준비하는 쪽. 모델 적재가 여기서 일어난다.
-    typealias Supplier = @MainActor () async -> (counselor: Counselor, provenance: InterpretationStore.Provenance)?
+    typealias Supplier = @MainActor () async -> (counselor: any Counselor, provenance: InterpretationStore.Provenance)?
 
     private(set) var consultations: [Consultation] = []
     private(set) var phases: [UUID: Phase] = [:]

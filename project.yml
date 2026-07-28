@@ -9,6 +9,8 @@ options:
 packages:
   SajuKit:
     path: SajuKit
+  RemoteLLM:
+    path: RemoteLLM
   MLXSwiftLM:
     url: https://github.com/ml-explore/mlx-swift-lm
     from: 3.31.3
@@ -30,6 +32,7 @@ targets:
       - App/FourEight
     dependencies:
       - package: SajuKit
+      - package: RemoteLLM
       - package: MLXSwiftLM
         products: [MLXLLM, MLXLMCommon, MLXHuggingFace]
       - package: SwiftHuggingFace
@@ -75,6 +78,22 @@ targets:
         # xcodebuild에 넘긴다. 자세한 규칙은 docs/release.md 참고.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # 이 Mac 안의 평문 HTTP를 위한 의도 표명.
+        #
+        # macOS 26 실측에서는 loopback·사설 IPv4로의 http가 ATS 예외 키
+        # 없이도 통과했다. 그런데 Apple 문서는 "macOS 14부터 ATS는 IP
+        # 주소로의 연결을 기본 허용하지 않는다"고 적어 실측과 어긋난다.
+        # 이 앱의 최소 버전은 15.0이고 거기서는 재측정하지 않았으므로,
+        # Apple이 문서에서 직접 권하는 대로 의도를 명시해 둔다.
+        # 원격(이 Mac 밖) 평문은 Endpoint가 거부하므로 이 키가 넓히는
+        # 범위는 로컬뿐이다.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        # 사용자가 다른 기기의 Ollama를 가리킬 수 있다. macOS 15부터
+        # 나가는 TCP 연결은 로컬 네트워크 권한을 요구하며(TN3179),
+        # 루프백은 예외다. 한 번 거절하면 초기화하는 방법이 없으므로
+        # 이 문장이 사용자가 판단할 유일한 근거다.
+        NSLocalNetworkUsageDescription: "이 Mac이나 같은 네트워크의 다른 기기에서 도는 AI 서버(Ollama, LM Studio 등)에 연결할 때만 씁니다. 생년월일시와 해석은 사용자가 직접 지정한 주소로만 갑니다."
         LSApplicationCategoryType: public.app-category.lifestyle
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: "© 2026 waylake. MIT License."

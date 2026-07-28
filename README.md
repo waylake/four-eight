@@ -35,7 +35,7 @@ four-eight reads a Four Pillars chart the way a careful practitioner would: it r
 **The model never calculates.** Every pillar, ten-god, and luck cycle comes from `SajuKit`, and every sentence in the interpretation carries a visible chip naming the rule it came from. Click the chip and you see the source text.
 
 - **Correct on the hard cases.** Solar-term boundaries to the minute, Korea's UTC+8:30 eras, the 1948–1960 and 1987–1988 daylight-saving periods, and the 23:00 hour dispute — all handled explicitly, all covered by tests against published almanacs.
-- **Nothing leaves your Mac.** Birth data is never transmitted. The network is used for exactly one thing: downloading a model file, if you want one.
+- **Nothing leaves your Mac by default.** Birth data is never transmitted; the network is used to download a model file, if you want one, and to check for updates. Since 0.3.0 you may point the app at an OpenAI-compatible provider of your choosing — and if you do, it shows you **the exact text that will be sent, before the first send**. The person's name and the raw birth timestamp are never sent even then.
 - **Schools disagree, so the app says so.** True solar time, the 야자시 policy, and luck-cycle rounding are settings, not silent assumptions.
 
 <p align="center">
@@ -143,13 +143,33 @@ Turn the check off in Settings → Updates if you prefer; the "Check now" button
 
 Releases that change how charts are computed say so in the release notes, because a chart you already read may come out differently.
 
+### You choose where the prose is written
+
+The reading is always assembled from rule source text; AI prose is an optional layer on top. If you want that layer, there are three places it can come from.
+
+| Where | Does your text leave this Mac? | What it needs |
+|---|---|---|
+| In this app (Gemma 4 / MLX) | No | 3.6 GB download, Apple Silicon |
+| On this Mac (Ollama, LM Studio, … on `localhost`) | No — it is loopback | That server running locally |
+| Off this Mac (any OpenAI-compatible provider) | **Yes** | Base URL, model name, API key |
+
+Pick the third and the app shows you **the literal text it is about to send, before it sends it.** Not a checkbox — the actual bytes. It asks once per host: asking every time teaches people to click without reading, and at that point the gate is worse than no gate.
+
+It does not ask for the second case. Loopback traffic never leaves the machine, so there is nothing to disclose, and warning there would drain the warning of meaning where it actually matters.
+
+Plaintext `http` to anything off this Mac is refused, not warned about — your API key and whatever you wrote would ride in the clear.
+
+There is no bundled provider list. Naming providers would imply endorsement the app cannot back up, since it has no way to verify how any of them handle what you send; base URLs and policies also change, so a bundled list rots silently. Check your provider's own policy for training use and retention.
+
+The reasoning is in [ADR 0011](docs/adr/0011-remote-provider-as-a-destination.md).
+
 ## Usage
 
 1. Press <kbd>⌘</kbd><kbd>N</kbd> and enter a name, birth date, time, and birthplace.
 2. Watch the correction line under the preview — it shows the true solar time, the longitude offset, and whether daylight saving applied. If you disagree with a convention, change it in Settings.
 3. Read the chart in the centre column: four pillars, hidden stems, ten gods, twelve stages, five-element distribution, luck cycles.
 4. Read the interpretation on the right. Click any evidence chip to see the rule behind a passage.
-5. Optionally open Settings → Models and install Gemma 4 to have the same content rewritten as flowing prose.
+5. Optionally open Settings → Interpretation and choose where prose gets written: download Gemma 4 to run on this Mac, or point the app at an OpenAI-compatible provider you already use. Either way the same content is rewritten as flowing prose.
 
 ## How it works
 

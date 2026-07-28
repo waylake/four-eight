@@ -103,7 +103,7 @@ struct TodayMenuView: View {
     private var footer: some View {
         HStack {
             Button("앱 열기") {
-                appState.destination = .today
+                appState.page = .today
                 appState.selectedDate = nil
                 openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)

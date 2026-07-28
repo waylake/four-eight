@@ -7,8 +7,8 @@ struct SettingsView: View {
             Tab("유파", systemImage: "slider.horizontal.3") {
                 SchoolSettingsView()
             }
-            Tab("모델", systemImage: "cpu") {
-                ModelManagerView()
+            Tab("해석", systemImage: "wand.and.stars") {
+                WriterSettingsView()
             }
             Tab("업데이트", systemImage: "arrow.triangle.2.circlepath") {
                 UpdateSettingsView()
@@ -17,7 +17,7 @@ struct SettingsView: View {
                 AboutView()
             }
         }
-        .frame(width: 520, height: 430)
+        .frame(width: 560, height: 520)
     }
 }
 
@@ -54,40 +54,8 @@ struct SchoolSettingsView: View {
                     Text("버림").tag(SajuOptions.DaeunRounding.floor)
                 }
             }
-            Section("해석") {
-                Toggle("온디바이스 AI 기능 제시", isOn: $state.useLLM)
-                Text("해설은 항상 근거 원문으로 조립돼 있습니다. 이 스위치는 그것을 AI 문장으로 다시 쓰는 버튼과 대화 기능을 보이게 할지만 정합니다. 켜 두어도 사용자가 누르지 않으면 생성하지 않습니다.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
-    }
-}
-
-/// 모델 관리 — 설치·활성·삭제.
-struct ModelManagerView: View {
-    @Environment(ModelManager.self) private var modelManager
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            List {
-                Section {
-                    ForEach(ModelCatalog.models) { model in
-                        ModelRow(model: model)
-                    }
-                } header: {
-                    Text("Gemma 4 (Apache 2.0)")
-                } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("모델은 Hugging Face에서 내려받아 이 Mac에만 저장됩니다. 다운로드 후 해석은 네트워크 없이 동작합니다.")
-                        Text("한 번 고르면 앱을 껐다 켜도 선택이 남습니다. 메모리 적재는 AI 문장을 처음 주문할 때 자동으로 일어나므로, 이 화면에 다시 오실 일은 없습니다.")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-            }
-        }
     }
 }
 
@@ -247,6 +215,9 @@ struct UpdateSettingsView: View {
 }
 
 struct AboutView: View {
+    @Environment(Writers.self) private var writers
+    @Environment(AppState.self) private var appState
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -270,8 +241,8 @@ struct AboutView: View {
                 Group {
                     labeled("계산 엔진", "SajuKit — VSOP87D 태양 시황경, IAU 1980 장동, Meeus 삭망. 절기·음양력을 이 Mac에서 직접 계산합니다.")
                     labeled("시간 보정", "IANA tzdb 기반 역사 표준시·서머타임(1948–1960, 1987–1988), 출생지 경도 진태양시.")
-                    labeled("해석", "결정론적 룰 엔진이 근거를 선별하고, 선택 시 Gemma 4가 문장으로 엮습니다. 모든 해설에 근거가 표시됩니다.")
-                    labeled("프라이버시", "생년월일시와 해석은 네트워크로 전송되지 않습니다. 네트워크는 모델 다운로드에만 사용됩니다.")
+                    labeled("해석", "결정론적 룰 엔진이 근거를 선별하고, 선택 시 언어 모델이 문장으로 엮습니다. 모든 해설에 근거가 표시됩니다. 모델이 없어도 해설은 완결돼 있습니다.")
+                    labeled("프라이버시", privacyStatement)
                 }
                 Divider()
                 Text("이 앱의 해설은 참고용이며 의료·투자·법률 조언이 아닙니다.")
@@ -283,6 +254,30 @@ struct AboutView: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// 프라이버시 문장은 **지금 설정에서 나온다.**
+    ///
+    /// 예전에는 "생년월일시와 해석은 네트워크로 전송되지 않습니다"가 고정
+    /// 문자열이었다. 원격 제공자를 지정할 수 있게 된 뒤로 그 문장은 설정에
+    /// 따라 참이거나 거짓이 되고, 거짓일 때가 하필 사용자가 알아야 하는
+    /// 경우다. 고정된 프라이버시 주장은 언젠가 거짓말이 된다.
+    ///
+    /// 기본 상태에서는 예전과 같은 문장이 나온다. 대부분의 사용자에게
+    /// 주장이 약해지지 않는다는 뜻이고, 약해지는 사용자는 스스로 그렇게
+    /// 설정한 사람이다.
+    private var privacyStatement: String {
+        guard appState.useLLM, writers.isAvailable else {
+            return "생년월일시와 해석은 이 Mac을 벗어나지 않습니다. 네트워크는 모델 다운로드와 업데이트 확인에만 사용됩니다."
+        }
+        switch writers.plannedDestination {
+        case .inProcess:
+            return "생년월일시와 해석은 이 Mac을 벗어나지 않습니다. 네트워크는 모델 다운로드와 업데이트 확인에만 사용됩니다."
+        case .onMachine(let host):
+            return "해석을 이 Mac에서 도는 \(host)에 주문하도록 설정하셨습니다. 루프백이므로 글이 기기를 벗어나지 않습니다. 생년월일시 원본과 인물 이름은 어느 경우에도 전송되지 않습니다."
+        case .offMachine(let host):
+            return "해석을 \(host)에 주문하도록 설정하셨습니다. AI 문장을 주문하시면 계산이 끝난 명식 근거와 상담에 적으신 글이 그곳으로 전송됩니다. 생년월일시 원본과 인물 이름은 전송되지 않습니다. 그 밖의 계산과 저장은 이 Mac에서만 일어납니다."
         }
     }
 

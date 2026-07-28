@@ -56,10 +56,22 @@ struct Consultation: Codable, Sendable, Identifiable, Hashable {
         /// 이 답이 실제로 쓴 근거. 답변마다 근거 칩이 붙는 근거다.
         var evidenceIDs: [String]
         var writtenAt: Date
+        /// **이 발언을** 누가 어디로 보내 썼는가.
+        ///
+        /// 상담 단위 출처만 두었을 때 거짓말이 생긴다. 상담은 며칠에 걸쳐
+        /// 이어질 수 있고 그 사이 사용자가 쓰는 곳을 바꿀 수 있는데, 상담에
+        /// 하나만 두면 마지막 값이 모든 답변에 붙는다. 이 Mac에서 쓴 답변이
+        /// 원격에서 쓴 것으로 표시되는 것은 이 앱이 해서는 안 되는 종류의
+        /// 거짓말이다.
+        ///
+        /// 옵셔널인 이유는 마이그레이션이다. 이 항목이 생기기 전에 보관된
+        /// 상담에는 값이 없고, 그때 화면은 상담 단위 값을 보여 주었다.
+        var provenance: InterpretationStore.Provenance?
 
         init(
             id: UUID = UUID(), speaker: Speaker, text: String,
-            isComplete: Bool = true, evidenceIDs: [String] = [], writtenAt: Date = Date()
+            isComplete: Bool = true, evidenceIDs: [String] = [], writtenAt: Date = Date(),
+            provenance: InterpretationStore.Provenance? = nil
         ) {
             self.id = id
             self.speaker = speaker
@@ -67,6 +79,7 @@ struct Consultation: Codable, Sendable, Identifiable, Hashable {
             self.isComplete = isComplete
             self.evidenceIDs = evidenceIDs
             self.writtenAt = writtenAt
+            self.provenance = provenance
         }
     }
 

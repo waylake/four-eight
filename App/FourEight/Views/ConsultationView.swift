@@ -1,4 +1,5 @@
 import SwiftUI
+import RemoteLLM
 import UniformTypeIdentifiers
 import SajuKit
 
@@ -145,6 +146,7 @@ struct NewConsultationPane: View {
     let reading: Reading
     @Environment(AppState.self) private var appState
     @Environment(ConsultationStore.self) private var store
+    @Environment(Writers.self) private var writers
 
     @State private var concern = ""
     @State private var chosenTopic: ConsultationTopic?
@@ -284,6 +286,22 @@ struct NewConsultationPane: View {
         }
     }
 
+    /// 지금 설정에서 사용자의 글이 어디까지 가는가.
+    private var whereTextGoes: String {
+        guard appState.useLLM, writers.isAvailable else {
+            // 풀이를 주문할 수 없는 상태다. 아무것도 나가지 않는다.
+            return "적어 주신 글은 이 Mac을 벗어나지 않습니다."
+        }
+        switch writers.plannedDestination {
+        case .inProcess:
+            return "적어 주신 글은 이 Mac을 벗어나지 않습니다. 풀이는 이 Mac의 모델이 씁니다."
+        case .onMachine(let host):
+            return "풀이는 이 Mac에서 도는 \(host)가 씁니다. 글은 이 Mac을 벗어나지 않습니다."
+        case .offMachine(let host):
+            return "풀이를 받으시면 명식 근거와 적어 주신 글이 \(host)로 전송됩니다. 처음 보낼 때 무엇이 나가는지 보여 드립니다."
+        }
+    }
+
     private var groundingNote: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
@@ -292,9 +310,19 @@ struct NewConsultationPane: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("이 상담은 계산된 명식과 근거 규칙만 봅니다")
                         .font(.caption)
-                    Text("근거에 없는 것은 지어내지 않고 모른다고 답합니다. 답변마다 어떤 규칙에서 나왔는지 표시됩니다. 적어 주신 글은 이 Mac을 벗어나지 않습니다.")
+                    Text("근거에 없는 것은 지어내지 않고 모른다고 답합니다. 답변마다 어떤 규칙에서 나왔는지 표시됩니다.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    // 이 문장은 **상태에서 나온다.**
+                    //
+                    // 예전에는 "적어 주신 글은 이 Mac을 벗어나지 않습니다"가
+                    // 그냥 박혀 있었다. 원격 제공자를 붙일 수 있게 된 뒤로
+                    // 그 문장은 설정에 따라 참이거나 거짓이고, 거짓일 때가
+                    // 하필 사용자가 알아야 하는 경우다. 프라이버시 주장을
+                    // 고정 문자열로 두면 언젠가 거짓말이 된다.
+                    Text(whereTextGoes)
+                        .font(.caption2)
+                        .foregroundStyle(writers.plannedToLeaveMachine ? Ink.cinnabar : .secondary)
                 }
             }
             Divider()
@@ -467,14 +495,17 @@ struct ConsultationDetail: View {
 
     @Environment(AppState.self) private var appState
     @Environment(ConsultationStore.self) private var store
-    @Environment(ModelManager.self) private var modelManager
+    @Environment(Writers.self) private var writers
 
     @State private var followUp = ""
     @State private var selectedRule: Rule?
     @State private var isExporting = false
+    @State private var pendingSend: PendingSend?
+    /// 덧붙인 말이 안전 선별에 걸렸다. 모델을 부르지 않았다.
+    @State private var followUpCrisis: [String]?
 
     private var phase: ConsultationStore.Phase { store.phase(of: consultation.id) }
-    private var aiOffered: Bool { appState.useLLM && modelManager.isAvailable }
+    private var aiOffered: Bool { appState.useLLM && writers.isAvailable }
     private var evidence: [Rule] {
         let ids = Set(consultation.evidenceIDs)
         return SajuService.ruleSet.rules.filter { ids.contains($0.id) }
@@ -484,6 +515,13 @@ struct ConsultationDetail: View {
         VStack(spacing: 0) {
             transcript
             Divider()
+            if let followUpCrisis {
+                // 기록을 남기지 않는다. 위기의 순간이 목록에 남아 있는 것은
+                // 도움이 되지 않고, 사용자가 저장을 요청한 것도 아니다.
+                // 모델은 부르지 않았고, 원격이라면 아무것도 나가지 않았다.
+                CrisisCard(matched: followUpCrisis) { self.followUpCrisis = nil }
+                    .padding(14)
+            }
             composer
         }
         .background(.background)
@@ -512,6 +550,34 @@ struct ConsultationDetail: View {
             .padding(14)
             .frame(width: 330)
         }
+        .sheet(item: $pendingSend) { send in
+            OutboundDisclosure(
+                destination: send.destination,
+                model: send.model,
+                system: send.system,
+                user: send.user,
+                summary: send.summary,
+                onConfirm: {
+                    if let host = send.destination.host {
+                        writers.remote.acknowledge(host: host)
+                    }
+                    pendingSend = nil
+                    send.run()
+                },
+                onCancel: { pendingSend = nil }
+            )
+        }
+    }
+
+    /// 버튼 설명. "모델을 불러온다"는 말은 원격에서는 사실이 아니다.
+    private var answerHelp: String {
+        if writers.needsLoadBeforeUse {
+            return "모델을 불러온 뒤 이 근거로 풀이를 씁니다. 처음 한 번은 몇 초 더 걸립니다."
+        }
+        if writers.plannedToLeaveMachine, let host = writers.plannedDestination.host {
+            return "이 근거와 적어 주신 글을 \(host)로 보내 풀이를 씁니다."
+        }
+        return "이 근거로 풀이를 씁니다."
     }
 
     // MARK: 기록
@@ -525,7 +591,11 @@ struct ConsultationDetail: View {
                     ForEach(consultation.turns) { turn in
                         TurnBubble(
                             turn: turn,
-                            provenance: turn.speaker == .counselor ? consultation.provenance : nil,
+                            // 발언 자신의 기록을 먼저 본다. 상담 단위 값만
+                            // 보면 마지막 값이 모든 답변에 붙어, 이 Mac에서
+                            // 쓴 답변이 원격에서 쓴 것으로 표시된다.
+                            provenance: turn.speaker == .counselor
+                                ? (turn.provenance ?? consultation.provenance) : nil,
                             evidence: turn.speaker == .counselor ? evidence : [],
                             onRule: { selectedRule = $0 }
                         )
@@ -636,7 +706,7 @@ struct ConsultationDetail: View {
     private var contextNote: some View {
         VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("이 상담은 근거 \(evidence.count)개와 최근 발언 \(Counselor.recentTurnWindow)개를 봅니다.")
+                Text("이 상담은 근거 \(evidence.count)개와 최근 발언 \(CounselBrief.recentTurnWindow)개를 봅니다.")
                 Text("그 밖의 것은 기억하지 않습니다. 턴이 길어지면 근거에서 멀어지므로, 다른 고민은 새 상담으로 여는 편이 정확합니다.")
             }
             .font(.caption2)
@@ -735,9 +805,7 @@ struct ConsultationDetail: View {
                 }
                 if aiOffered {
                     Button {
-                        let text = followUp
-                        followUp = ""
-                        store.answer(id: consultation.id, followUp: text, supplier: supplier)
+                        requestAnswer()
                     } label: {
                         Label(
                             consultation.awaitsFirstAnswer ? "풀이 받기" : "이어 묻기",
@@ -745,11 +813,7 @@ struct ConsultationDetail: View {
                         )
                     }
                     .keyboardShortcut(.return, modifiers: .command)
-                    .help(
-                        modelManager.needsLoadBeforeUse
-                            ? "모델을 불러온 뒤 이 근거로 풀이를 씁니다. 처음 한 번은 몇 초 더 걸립니다."
-                            : "이 근거로 풀이를 씁니다."
-                    )
+                    .help(answerHelp)
                 }
             }
         }
@@ -762,33 +826,65 @@ struct ConsultationDetail: View {
         store.retopic(consultation.id, topic: topic, evidenceIDs: evidence.map(\.id))
     }
 
-    /// 답변 재료. 모델 적재가 여기서 일어난다.
+    /// 이 턴에 쓸 재료. 결정론적으로 이미 다 정해져 있다.
+    private var brief: CounselBrief {
+        CounselBrief(
+            facts: reading.facts.summaryLines,
+            todayFacts: consultation.includesToday
+                ? SajuService.fortune(on: Date(), reading: reading).facts.summaryLines
+                : nil,
+            topic: consultation.topic,
+            evidence: evidence
+        )
+    }
+
+    /// 답변 재료를 준비하는 쪽. 모델 적재나 키체인 읽기가 여기서 일어난다.
+    ///
+    /// 출처는 여기서 만들지 않는다. `Writers`가 한 곳에서 만든다.
     private var supplier: ConsultationStore.Supplier {
-        let manager = modelManager
-        let facts = reading.facts.summaryLines
-        let today = consultation.includesToday
-            ? SajuService.fortune(on: Date(), reading: reading).facts.summaryLines
-            : nil
-        let topic = consultation.topic
-        let rules = evidence
-        return {
-            guard let container = await manager.prepare(),
-                  let model = manager.preferredModel
-            else { return nil }
-            return (
-                Counselor(
-                    container: container, facts: facts, todayFacts: today,
-                    topic: topic, evidence: rules
-                ),
-                InterpretationStore.Provenance(
-                    modelID: model.id,
-                    modelName: model.displayName,
-                    writtenAt: Date(),
-                    appVersion: AppVersion.marketing,
-                    ruleSetVersion: SajuService.ruleSet.version
-                )
-            )
+        let writers = writers
+        let brief = brief
+        return { await writers.prepareCounselor(brief: brief) }
+    }
+
+    /// 풀이를 요청한다.
+    ///
+    /// 두 관문을 지난다. **안전 선별이 먼저이고, 그다음이 전송 확인이다.**
+    /// 순서가 중요하다 — 위기 표현이 담긴 글은 확인 화면에 띄워 보여줄
+    /// 것도 아니고, 그 화면에서 사용자가 "보냅니다"를 누를 기회를 주는
+    /// 것 자체가 잘못이다.
+    private func requestAnswer() {
+        let text = followUp.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 안전 선별은 모델보다 먼저다. 처음 적은 고민만 검사하고 덧붙인
+        // 말은 검사하지 않던 시절이 있었다. 로컬에서도 잘못이었지만,
+        // 원격이 붙은 뒤에는 위기 표현이 남의 서버로 나가는 경로가 된다.
+        if !text.isEmpty, case .crisis(let matched) = SafetyScreen.evaluate(text) {
+            followUpCrisis = matched
+            return
         }
+
+        let start = {
+            let outgoing = followUp
+            followUp = ""
+            store.answer(id: consultation.id, followUp: outgoing, supplier: supplier)
+        }
+        guard writers.needsAcknowledgement, let config = writers.remote.config
+        else { start(); return }
+
+        let brief = brief
+        pendingSend = PendingSend(
+            destination: config.destination,
+            model: config.model,
+            system: CounselBrief.instructions,
+            user: brief.promptText(for: consultation, followUp: text.isEmpty ? nil : text),
+            summary: [
+                "계산이 끝난 명식 사실 \(brief.facts.count)줄",
+                "이 주제의 근거 원문 \(evidence.count)개",
+                "적어 주신 고민 원문과 최근 발언 최대 \(CounselBrief.recentTurnWindow)개",
+            ],
+            run: start
+        )
     }
 
     /// 내보내기 — 근거 ID까지 함께 나간다. 나중에 이 문장이 어디서
@@ -800,7 +896,7 @@ struct ConsultationDetail: View {
         out += "- 축: \(consultation.topic.axis)\n"
         out += "- 연 날짜: \(consultation.openedAt.formatted(date: .long, time: .shortened))\n"
         if let p = consultation.provenance {
-            out += "- 풀이: \(p.modelName), 근거 \(String(p.ruleSetVersion))판, 앱 \(p.appVersion)\n"
+            out += "- 풀이: \(p.modelName) (\(p.resolvedDestination.label)), 근거 \(String(p.ruleSetVersion))판, 앱 \(p.appVersion)\n"
         }
         out += "\n## 고민\n\n\(consultation.concern)\n"
         out += "\n## 근거\n\n"

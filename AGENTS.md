@@ -8,7 +8,17 @@ AI 코딩 에이전트가 이 저장소에서 작업할 때 알아야 할 것들
 
 **`SajuKit`에 의존성을 추가하지 마세요.** Foundation만 씁니다. 이 제약이 이 패키지의 가치입니다.
 
+**HTTP나 SSE를 `SajuKit`이나 앱 타깃에 넣지 마세요.** `RemoteLLM` 패키지에 둡니다. `SajuKit`은 명리 엔진이고, 앱 타깃에 두면 Xcode 없이 테스트할 방법이 사라집니다. 이 층에서 틀리기 쉬운 것들(줄 경계, 멀티바이트 분할, 오류 매핑)은 `swift test`로 고정되어야 합니다.
+
+**`URLSession.AsyncBytes`의 `.lines`로 SSE를 읽지 마세요.** 실측 결과 `.lines`는 **빈 줄을 전부 버립니다.** 빈 줄은 SSE에서 이벤트 경계이므로 프레이밍이 사라집니다. `U+2028`·`U+0085`처럼 SSE가 종결자로 규정하지 않는 코드포인트에서도 줄을 쪼갭니다. `SSEParser`가 바이트를 모아 직접 자르는 이유입니다.
+
 **모델이 사용자를 대신해 시작하는 일을 만들지 마세요.** LLM 생성은 사용자가 버튼을 눌러야만 시작합니다. `onAppear`·`onChange`·`task`에서 생성을 부르면 안 되고, "캐시가 없으면 채우는" 함수를 다시 만들면 안 됩니다. 화면에는 규칙 엔진이 조립한 기준선 문장이 항상 먼저 있습니다. `scripts/check_generation_policy.sh`가 검사하고 CI가 실행합니다. 근거는 [ADR 0009](./docs/adr/0009-baseline-first-generation-on-demand.md)에 있습니다.
+
+**사용자의 글이 이 Mac을 벗어나는 경로를 조용히 만들지 마세요.** 목적지는 셋입니다 — 이 앱 안(`inProcess`), 이 Mac 안(`onMachine`, 루프백), 이 Mac 밖(`offMachine`). 판정이 애매하면 `offMachine`이라고 말합니다. 루프백을 원격이라 부르면 사용자가 확인 화면을 한 번 더 보고, 원격을 루프백이라 부르면 사용자는 자기 글이 나간 것을 모릅니다. 이 Mac 밖으로 나가는 첫 전송 앞에는 무엇이 나가는지 원문으로 보여주는 관문이 있어야 하고, 그것은 설정 화면이 아니라 보내기 직전에 있습니다. [ADR 0011](./docs/adr/0011-remote-provider-as-a-destination.md)을 보세요.
+
+**프라이버시 문장을 고정 문자열로 두지 마세요.** "네트워크로 전송되지 않습니다"는 이제 설정에 따라 참이거나 거짓이고, 거짓일 때가 하필 사용자가 알아야 하는 경우입니다. About 화면과 상담 화면의 문장은 `Writers.plannedDestination`에서 계산합니다. 이미 화면에 있는 문장의 출처는 설정이 아니라 `Provenance` 기록에서 읽습니다.
+
+**지시문과 프롬프트 조립을 전송 층에 두지 마세요.** 톤 규약은 이 앱의 해석 품질 자체이고 목적지에 따라 달라질 이유가 없습니다. `CounselBrief`·`InterpretationBrief`에만 두고 전송 층은 나르기만 합니다. 두 경로가 각자 프롬프트를 가지면 반드시 어긋나며, 문제는 어긋난 것이 아니라 **어긋났다는 사실을 아무도 모르는 것**입니다 — 양쪽 출력이 다 그럴듯합니다. `scripts/check_generation_policy.sh`가 검사합니다.
 
 **모델에게 안전 판단을 맡기지 마세요.** 위기 표현 감지와 대응 문구는 결정론적 코드가 처리하고 모델을 호출하지 않습니다. 계산을 맡기지 않는 것과 같은 이유입니다 — 그럴듯하게 틀리면 사람이 다칩니다. [ADR 0010](./docs/adr/0010-consultation-over-open-chat.md)을 보세요.
 
@@ -25,6 +35,15 @@ AI 코딩 에이전트가 이 저장소에서 작업할 때 알아야 할 것들
 | `ENABLE_HARDENED_RUNTIME` | `false` | ad-hoc 서명과 겹치면 Sparkle 로드가 실패합니다. Developer ID가 생기기 전까지 켜지 마세요 |
 | `ARCHS` | `arm64` | MLX는 Metal 기반이라 Apple Silicon 전용입니다. x86_64 슬라이스는 동작하지 않으면서 빌드 시간만 두 배로 만듭니다 |
 
+**아래 두 개는 추가하면 앱이 죽거나 조용히 망가집니다.** 실측 근거는 [macos-network-and-keychain.md](./docs/research/macos-network-and-keychain.md)에 있습니다.
+
+| 하지 말 것 | 무슨 일이 일어나는가 |
+|---|---|
+| `keychain-access-groups` entitlement 추가 | ad-hoc 서명에서는 provisioning profile이 이 권한을 인가할 수 없어 **앱이 실행 시점에 SIGKILL됩니다**(exit 137). 출력도 없이 죽습니다 |
+| `kSecUseDataProtectionKeychain` 또는 `kSecAttrAccessible` 사용 | ad-hoc 서명에서 `-34018 errSecMissingEntitlement`입니다. `kSecAttrAccessible`은 data protection 키체인에서만 유효하므로 legacy에 주면 아무 일도 하지 않으면서 "접근 범위를 좁혀 두었다"는 착각만 만듭니다 |
+
+키체인 관련해 알아야 할 사실이 하나 더 있습니다. legacy 키체인 ACL은 쓴 프로세스의 **코드 해시**에 묶이므로, **앱을 업데이트하면 저장된 API 키를 읽지 못합니다**(`-25293 errSecAuthFailed`). 이것은 버그가 아니라 Developer ID 인증서가 없는 상태의 정상 동작이며, `Secrets.Lookup.needsReentry`가 그 상태에 이름을 붙여 사용자에게 무엇을 하면 되는지 말합니다. 오류로 뭉개지 마세요.
+
 **`appcast.xml`을 소급 수정하지 마세요.** append-only로 다룹니다. 잘못 나간 항목은 지우지 말고 더 높은 빌드 번호로 새 릴리스를 올려 덮습니다. 파일은 저장소 루트에 있고 릴리스 워크플로가 항목을 더해 커밋합니다. 손으로 고칠 일은 없습니다. `scripts/check_appcast.py`가 CI에서 검사합니다.
 
 **GitHub Pages를 배포하는 워크플로를 새로 만들지 마세요.** `pages.yml` 하나뿐입니다. Pages 배포는 사이트 전체 교체이므로 배포 경로가 둘이 되면 나중에 배포된 쪽이 상대의 파일을 지웁니다. `appcast.xml`이 사라지면 모든 사용자의 업데이트 확인이 조용히 죽습니다 — 오류도 나지 않습니다. 사이트는 항상 `web/` + `appcast.xml`에서 조립됩니다.
@@ -32,7 +51,8 @@ AI 코딩 에이전트가 이 저장소에서 작업할 때 알아야 할 것들
 ## 빌드와 테스트
 
 ```bash
-cd SajuKit && swift test              # 엔진만. Xcode 불필요
+cd SajuKit && swift test              # 명리 엔진. Xcode 불필요
+cd RemoteLLM && swift test            # 원격 전송 층. Xcode 불필요
 xcodegen generate                     # project.yml → .xcodeproj
 xcodebuild -project FourEight.xcodeproj -scheme FourEight \
            -configuration Debug \

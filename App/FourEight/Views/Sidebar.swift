@@ -8,17 +8,17 @@ struct Sidebar: View {
 
     var body: some View {
         @Bindable var state = appState
-        List(selection: $state.destination) {
+        List(selection: $state.page) {
             if appState.selectedPerson != nil {
                 Section {
                     Label("오늘", systemImage: "sun.horizon")
-                        .tag(Destination.today)
+                        .tag(Page.today)
                     Label("캘린더", systemImage: "calendar")
-                        .tag(Destination.calendar)
+                        .tag(Page.calendar)
                     Label("명식", systemImage: "square.grid.2x2")
-                        .tag(Destination.chart)
+                        .tag(Page.chart)
                     Label("상담", systemImage: "bubble.left.and.text.bubble.right")
-                        .tag(Destination.consultation)
+                        .tag(Page.consultation)
                 }
             }
 

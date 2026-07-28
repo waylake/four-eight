@@ -12,7 +12,7 @@ struct ContentView: View {
         } detail: {
             Group {
                 if let reading = appState.reading {
-                    switch appState.destination {
+                    switch appState.page {
                     case .today:
                         TodayView(reading: reading)
                     case .calendar:

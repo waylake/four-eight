@@ -1,4 +1,5 @@
 import SwiftUI
+import RemoteLLM
 import SajuKit
 
 /// 명식 해석 패널.
@@ -13,7 +14,7 @@ struct InterpretationPanel: View {
             ),
             sections: reading.sections,
             facts: reading.facts.summaryLines,
-            instructions: GemmaInterpreter.natalInstructions,
+            instructions: InterpretationBrief.natalInstructions,
             title: "해석"
         )
     }
@@ -36,7 +37,7 @@ struct TimeInterpretationPanel: View {
             ),
             sections: fortune.sections,
             facts: fortune.facts.summaryLines,
-            instructions: GemmaInterpreter.timeInstructions,
+            instructions: InterpretationBrief.timeInstructions,
             title: "풀이"
         )
     }
@@ -65,12 +66,20 @@ struct GenerationSurface: View {
 
     @Environment(InterpretationStore.self) private var store
     @Environment(AppState.self) private var appState
-    @Environment(ModelManager.self) private var modelManager
+    @Environment(Writers.self) private var writers
+
+    /// 이 Mac을 벗어나기 전에 사용자에게 보여줄 전송. 확인 대화상자가
+    /// 살아 있는 동안만 존재하므로 뷰의 상태로 두어도 된다.
+    @State private var pendingSend: PendingSend?
 
     private var document: InterpretationStore.Document? { store.document(for: key) }
     private var phase: InterpretationStore.Phase { store.phase(for: key) }
     /// AI 문장을 제시할 수 있는 상태인가. 적재 여부는 묻지 않는다.
-    private var aiOffered: Bool { appState.useLLM && modelManager.isAvailable }
+    private var aiOffered: Bool { appState.useLLM && writers.isAvailable }
+
+    private var brief: InterpretationBrief {
+        InterpretationBrief(facts: facts, instructions: instructions)
+    }
 
     var body: some View {
         ScrollView {
@@ -100,6 +109,56 @@ struct GenerationSurface: View {
         // 읽기만 한다. 이 경로에서 생성이 시작되는 일은 없다.
         .onAppear { store.restore(key: key) }
         .onChange(of: key) { store.restore(key: key) }
+        .sheet(item: $pendingSend) { send in
+            OutboundDisclosure(
+                destination: send.destination,
+                model: send.model,
+                system: send.system,
+                user: send.user,
+                summary: send.summary,
+                onConfirm: {
+                    // 확인은 이 호스트에 대해 남는다. 매번 물으면 사용자는
+                    // 읽지 않고 누르는 법을 배운다.
+                    if let host = send.destination.host {
+                        writers.remote.acknowledge(host: host)
+                    }
+                    pendingSend = nil
+                    send.run()
+                },
+                onCancel: { pendingSend = nil }
+            )
+        }
+    }
+
+    /// 생성을 요청한다. 이 Mac을 벗어나는 첫 요청이면 무엇이 나가는지 먼저 보여준다.
+    ///
+    /// 관문을 여기 두는 것이 중요하다. 설정 화면에 두면 읽히지 않고,
+    /// `store` 안에 두면 화면이 없는 곳에서 결정하게 된다.
+    private func requestGeneration(resuming: Bool) {
+        let start = {
+            if resuming {
+                store.resume(key: key, sections: sections, supplier: supplier)
+            } else {
+                store.generate(key: key, sections: sections, supplier: supplier)
+            }
+        }
+        guard writers.needsAcknowledgement,
+              let first = sections.first,
+              let config = writers.remote.config
+        else { start(); return }
+
+        pendingSend = PendingSend(
+            destination: config.destination,
+            model: config.model,
+            system: brief.instructions,
+            user: brief.promptText(for: first, includesFacts: true),
+            summary: [
+                "계산이 끝난 명식 사실 \(facts.count)줄",
+                "이 섹션의 근거 원문 \(first.rules.count)개",
+                "섹션은 \(sections.count)개이므로 요청도 \(sections.count)번 나갑니다",
+            ],
+            run: start
+        )
     }
 
     private func isStreaming(_ id: String) -> Bool {
@@ -137,8 +196,8 @@ struct GenerationSurface: View {
             .foregroundStyle(.secondary)
         }
 
-        if appState.useLLM && !modelManager.isAvailable {
-            modelHint
+        if appState.useLLM, !writers.isAvailable {
+            writerHint
         }
     }
 
@@ -159,8 +218,14 @@ struct GenerationSurface: View {
                 Text("중단됨 · \(document?.completedCount ?? 0)/\(sections.count) 섹션")
             case .idle, .done, .failed:
                 if let document, document.isComplete {
-                    Image(systemName: "cpu")
-                    Text("\(document.provenance.modelName) · \(document.provenance.writtenAt.formatted(date: .abbreviated, time: .shortened))에 씀")
+                    // 목적지는 **기록**에서 읽는다. 지금 설정에서 뽑으면
+                    // 설정을 바꾼 순간 이미 있는 문장이 다른 곳에서 온 것으로
+                    // 표시된다. 그리고 섹션마다 다를 수 있으므로 문서가
+                    // 실제로 거쳐 간 곳을 모두 적는다.
+                    let places = document.destinations
+                    Image(systemName: document.anySectionLeftMachine
+                        ? "arrow.up.forward.square" : "cpu")
+                    Text("\(document.provenance.modelName) · \(places.map(\.label).joined(separator: ", ")) · \(document.provenance.writtenAt.formatted(date: .abbreviated, time: .shortened))에 씀")
                 } else {
                     Image(systemName: "text.book.closed")
                     Text("근거 원문 해설")
@@ -187,7 +252,7 @@ struct GenerationSurface: View {
             if aiOffered {
                 HStack(spacing: 6) {
                     Button {
-                        store.resume(key: key, sections: sections, supplier: supplier)
+                        requestGeneration(resuming: true)
                     } label: {
                         Label("이어서", systemImage: "play.fill")
                     }
@@ -200,16 +265,12 @@ struct GenerationSurface: View {
             if aiOffered {
                 HStack(spacing: 6) {
                     Button {
-                        store.generate(key: key, sections: sections, supplier: supplier)
+                        requestGeneration(resuming: false)
                     } label: {
                         Label(document == nil ? "AI로 다시 쓰기" : "새로 쓰기", systemImage: "wand.and.stars")
                     }
                     .controlSize(.small)
-                    .help(
-                        modelManager.needsLoadBeforeUse
-                            ? "모델을 불러온 뒤 근거를 문장으로 엮습니다. 처음 한 번은 몇 초 더 걸립니다."
-                            : "근거를 문장으로 엮습니다."
-                    )
+                    .help(generateHelp)
                     if document != nil { discardButton }
                 }
             }
@@ -226,13 +287,24 @@ struct GenerationSurface: View {
         .help("AI가 쓴 문장을 지웁니다. 근거 원문 해설은 그대로 남습니다.")
     }
 
-    private var modelHint: some View {
+    /// 버튼 설명. "모델을 불러온다"는 말은 원격에서는 사실이 아니다.
+    private var generateHelp: String {
+        if writers.needsLoadBeforeUse {
+            return "모델을 불러온 뒤 근거를 문장으로 엮습니다. 처음 한 번은 몇 초 더 걸립니다."
+        }
+        if writers.plannedToLeaveMachine, let host = writers.plannedDestination.host {
+            return "근거를 \(host)로 보내 문장으로 엮습니다."
+        }
+        return "근거를 문장으로 엮습니다."
+    }
+
+    private var writerHint: some View {
         HStack(spacing: 8) {
             Image(systemName: "wand.and.stars")
             VStack(alignment: .leading, spacing: 2) {
-                Text("AI로 다시 쓰려면 모델을 고르세요")
+                Text("AI로 다시 쓰려면 쓸 곳을 고르세요")
                     .font(.callout)
-                Text("설정 → 모델에서 Gemma 4를 내려받으면 같은 근거를 매끄러운 문장으로 엮습니다. 지금 보이는 해설도 그대로 완전합니다.")
+                Text(writers.problem ?? "설정 → 해석에서 이 Mac의 Gemma를 내려받거나 OpenAI 호환 제공자를 지정하면, 같은 근거를 매끄러운 문장으로 엮습니다. 지금 보이는 해설도 그대로 완전합니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -251,27 +323,16 @@ struct GenerationSurface: View {
             .padding(.top, 4)
     }
 
-    /// 생성 재료를 준비하는 쪽. 모델 적재가 여기서 일어나므로, 사용자가
-    /// 설정 화면에 다시 갈 이유가 없다.
+    /// 생성 재료를 준비하는 쪽. 모델 적재나 키체인 읽기가 여기서
+    /// 일어나므로, 사용자가 설정 화면에 다시 갈 이유가 없다.
+    ///
+    /// 출처를 여기서 만들지 않는다. `Writers`가 한 곳에서 만든다 —
+    /// 화면마다 손으로 만들면 항목이 하나 늘 때 어딘가에서 빠지고,
+    /// 목적지는 빠뜨리면 사용자가 글이 나간 것을 모르게 되는 항목이다.
     private var supplier: InterpretationStore.Supplier {
-        let manager = modelManager
-        let facts = facts
-        let instructions = instructions
-        return {
-            guard let container = await manager.prepare(),
-                  let model = manager.preferredModel
-            else { return nil }
-            return (
-                GemmaInterpreter(container: container, facts: facts, instructions: instructions),
-                InterpretationStore.Provenance(
-                    modelID: model.id,
-                    modelName: model.displayName,
-                    writtenAt: Date(),
-                    appVersion: AppVersion.marketing,
-                    ruleSetVersion: SajuService.ruleSet.version
-                )
-            )
-        }
+        let writers = writers
+        let brief = brief
+        return { await writers.prepareInterpreter(brief: brief) }
     }
 }
 

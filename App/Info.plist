@@ -24,8 +24,15 @@
 	<string>public.app-category.lifestyle</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 waylake. MIT License.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>이 Mac이나 같은 네트워크의 다른 기기에서 도는 AI 서버(Ollama, LM Studio 등)에 연결할 때만 씁니다. 생년월일시와 해석은 사용자가 직접 지정한 주소로만 갑니다.</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<true/>
 	<key>NSSupportsSuddenTermination</key>

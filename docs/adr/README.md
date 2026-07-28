@@ -43,3 +43,4 @@
 | [0008](./0008-ship-arm64-only.md) | arm64 전용으로 배포한다 | accepted |
 | [0009](./0009-baseline-first-generation-on-demand.md) | 기준선을 항상 두고, 생성은 주문으로만 한다 | accepted |
 | [0010](./0010-consultation-over-open-chat.md) | 열린 채팅 대신 상담 단위로 다룬다 | accepted |
+| [0011](./0011-remote-provider-as-a-destination.md) | 원격 제공자는 새 엔진이 아니라 새 목적지다 | accepted |

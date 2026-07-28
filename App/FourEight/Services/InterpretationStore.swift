@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import RemoteLLM
 import SajuKit
 
 /// **AI가 쓴 해석문**의 보관소.
@@ -39,11 +40,29 @@ final class InterpretationStore {
         /// 근거 콘텐츠 판(rules.json version). 이 값이 지금과 다르면
         /// 그 사이 근거 문장이 바뀐 것이므로 화면에 표시한다.
         var ruleSetVersion: Int
+        /// 이 문장을 만드는 동안 글이 어디까지 갔는가.
+        ///
+        /// 옵셔널인 이유는 마이그레이션이다. 이 항목이 생기기 전에 보관된
+        /// 문서에는 값이 없고, 그때는 원격 경로가 존재하지 않았으므로
+        /// **nil은 `.inProcess`를 뜻한다.** "모른다"가 아니다.
+        /// 기본값을 준 비옵셔널 항목으로 두면 합성된 디코더가 키 없음에서
+        /// 실패해 사용자가 이미 만든 해석을 전부 잃는다.
+        var destination: Destination?
+
+        /// 화면과 내보내기에 쓰는 목적지. nil의 뜻을 한 곳에서만 해석한다.
+        var resolvedDestination: Destination { destination ?? .inProcess }
     }
 
     struct SectionState: Codable, Sendable, Hashable {
         var text: String = ""
         var isComplete: Bool = false
+        /// **이 섹션을** 누가 어디로 보내 썼는가.
+        ///
+        /// 문서 단위 출처만 두었을 때 거짓말이 생긴다. 재개는 미완료
+        /// 섹션만 다시 만들므로, Gemma로 절반을 만들고 원격으로 이어가면
+        /// 문서의 출처는 원격으로 덮어써지고 앞의 절반도 원격이 쓴 것으로
+        /// 표시된다. 생성의 단위가 섹션이면 출처의 단위도 섹션이어야 한다.
+        var provenance: Provenance?
     }
 
     struct Document: Codable, Sendable {
@@ -65,6 +84,26 @@ final class InterpretationStore {
         func text(for sectionID: String) -> String? {
             guard let state = sections[sectionID], !state.text.isEmpty else { return nil }
             return state.text
+        }
+
+        /// 완성된 섹션들이 실제로 거쳐 간 목적지. 중복 없이, 나온 순서대로.
+        ///
+        /// 문서 하나에 여러 개가 담길 수 있다. 사용자가 Gemma로 절반을
+        /// 만들고 원격으로 이어간 경우가 그렇고, 그때 "이 해석은 어디서
+        /// 왔는가"의 정직한 답은 하나가 아니다.
+        var destinations: [Destination] {
+            var seen: [Destination] = []
+            for id in order {
+                guard let state = sections[id], state.isComplete else { continue }
+                let destination = (state.provenance ?? provenance).resolvedDestination
+                if !seen.contains(destination) { seen.append(destination) }
+            }
+            return seen
+        }
+
+        /// 이 문서의 일부가 이 Mac을 벗어난 적이 있는가.
+        var anySectionLeftMachine: Bool {
+            destinations.contains { $0.leavesMachine }
         }
     }
 
@@ -236,6 +275,10 @@ final class InterpretationStore {
                         documents[key]?.sections[id, default: SectionState()].text += delta
                     case .sectionEnd(let id):
                         documents[key]?.sections[id]?.isComplete = true
+                        // 이 섹션을 실제로 쓴 쪽을 여기서 적는다. 문서
+                        // 단위로만 적으면 재개할 때 앞서 다른 곳에서 쓴
+                        // 섹션의 출처가 덮어써진다.
+                        documents[key]?.sections[id]?.provenance = prepared.provenance
                         // 섹션 단위로 보관한다. 여기서 앱이 죽어도 완성된
                         // 섹션은 남고, 다음 실행은 남은 것부터 이어간다.
                         persist(key)

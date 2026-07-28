@@ -4,12 +4,24 @@ import SajuKit
 @main
 struct FourEightApp: App {
     @State private var appState = AppState()
-    @State private var modelManager = ModelManager()
+    // 기본값을 주지 않는다. init에서 서로를 참조해 만들어야 하고,
+    // 기본값을 두면 버려지는 인스턴스가 한 번씩 더 만들어진다.
+    @State private var modelManager: ModelManager
+    @State private var remoteProvider: RemoteProviderStore
+    /// "누가 이 문장을 쓰는가"의 한 슬롯. 로컬 모델과 원격 제공자가
+    /// 후보로 들어간다. 어느 쪽을 골라도 캐시 키는 흔들리지 않는다.
+    @State private var writers: Writers
     @State private var interpretations = InterpretationStore()
     @State private var consultations = ConsultationStore()
     @State private var updates = UpdateController()
 
     init() {
+        let manager = ModelManager()
+        let provider = RemoteProviderStore()
+        _modelManager = State(initialValue: manager)
+        _remoteProvider = State(initialValue: provider)
+        _writers = State(initialValue: Writers(local: manager, remote: provider))
+
         // README용 스크린샷 생성 모드. 화면 기록 권한 없이 뷰를 직접 렌더링한다.
         if let path = ScreenshotRunner.requestedPath {
             DispatchQueue.main.async { ScreenshotRunner.run(outputPath: path) }
@@ -24,6 +36,8 @@ struct FourEightApp: App {
             ContentView()
                 .environment(appState)
                 .environment(modelManager)
+                .environment(remoteProvider)
+                .environment(writers)
                 .environment(interpretations)
                 .environment(consultations)
                 .frame(minWidth: 1000, minHeight: 660)
@@ -47,13 +61,13 @@ struct FourEightApp: App {
             }
             CommandGroup(after: .toolbar) {
                 Divider()
-                Button("오늘") { appState.destination = .today }
+                Button("오늘") { appState.page = .today }
                     .keyboardShortcut("1", modifiers: .command)
-                Button("캘린더") { appState.destination = .calendar }
+                Button("캘린더") { appState.page = .calendar }
                     .keyboardShortcut("2", modifiers: .command)
-                Button("명식") { appState.destination = .chart }
+                Button("명식") { appState.page = .chart }
                     .keyboardShortcut("3", modifiers: .command)
-                Button("상담") { appState.destination = .consultation }
+                Button("상담") { appState.page = .consultation }
                     .keyboardShortcut("4", modifiers: .command)
                 Divider()
                 Button("오늘로 이동") {
@@ -68,6 +82,8 @@ struct FourEightApp: App {
             SettingsView()
                 .environment(appState)
                 .environment(modelManager)
+                .environment(remoteProvider)
+                .environment(writers)
                 .environment(updates)
         }
 

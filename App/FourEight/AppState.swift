@@ -2,12 +2,18 @@ import Foundation
 import Observation
 import SajuKit
 
-/// 사이드바 목적지. 앱에는 두 가지 사용 모드가 있다.
+/// 사이드바가 고르는 화면. 앱에는 두 가지 사용 모드가 있다.
+///
+/// 이름이 `Destination`이었다. 원격 제공자를 붙이면서 "글이 어디까지
+/// 가는가"를 뜻하는 `RemoteLLM.Destination`이 생겼고, 한 이름이 화면
+/// 이동과 데이터 전송을 동시에 뜻하게 됐다. 둘 중 이쪽을 바꾼 이유는
+/// 저쪽이 보관 파일의 `kind` 값과 패키지의 공개 API에 이미 박혀 있어서다.
+/// 바꿀 수 있는 쪽을 바꾼다.
 ///
 /// 명식은 평생 바뀌지 않으므로 "한 번 보고 닫는" 화면이다. 그것만으로는
 /// 앱을 다시 열 이유가 없다. 시간 축(오늘·캘린더)이 두 번째 모드이며,
 /// 같은 명식을 매일 다른 각도에서 보게 한다.
-enum Destination: Hashable {
+enum Page: Hashable {
     case today
     case calendar
     case chart
@@ -19,7 +25,7 @@ enum Destination: Hashable {
 final class AppState {
     var store = PersonStore()
     var selectedPersonID: Person.ID?
-    var destination: Destination = .today
+    var page: Page = .today
     var isAddingPerson = false
     var editingPerson: Person?
     /// 캘린더에서 선택한 날. nil이면 오늘.

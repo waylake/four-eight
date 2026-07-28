@@ -32,6 +32,26 @@ jobs:
         working-directory: SajuKit
         run: swift test
 
+  remote:
+    name: RemoteLLM
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build cache
+        uses: actions/cache@v4
+        with:
+          path: RemoteLLM/.build
+          key: swiftpm-remote-${{ runner.os }}-${{ hashFiles('RemoteLLM/Package.swift') }}
+          restore-keys: |
+            swiftpm-remote-${{ runner.os }}-
+
+      # 골든 데이터는 실제 제공자가 보낸 바이트다. 편집되면 검사가
+      # 증명하는 것이 사라지므로, 테스트가 CR 유입까지 검사한다.
+      - name: Test
+        working-directory: RemoteLLM
+        run: swift test
+
   app:
     name: FourEight.app
     runs-on: macos-26
