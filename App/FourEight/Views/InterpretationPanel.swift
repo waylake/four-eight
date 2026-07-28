@@ -4,28 +4,17 @@ import SajuKit
 /// 명식 해석 패널.
 struct InterpretationPanel: View {
     let reading: Reading
-    @Environment(AppState.self) private var appState
-    @Environment(ModelManager.self) private var modelManager
-    @Environment(InterpretationStore.self) private var store
-
-    private var key: InterpretationStore.Key {
-        InterpretationStore.Key(
-            subject: reading.person.id.uuidString,
-            signature: reading.chart.signature,
-            engine: engineID(appState: appState, modelManager: modelManager)
-        )
-    }
 
     var body: some View {
         GenerationSurface(
-            key: key,
-            sections: reading.sections,
-            interpreter: makeInterpreter(
-                appState: appState, modelManager: modelManager, facts: reading.facts.summaryLines,
-                instructions: GemmaInterpreter.natalInstructions
+            key: .init(
+                subject: reading.person.id.uuidString,
+                signature: reading.chart.signature
             ),
-            title: "해석",
-            emptyHint: "명식 해석을 생성합니다."
+            sections: reading.sections,
+            facts: reading.facts.summaryLines,
+            instructions: GemmaInterpreter.natalInstructions,
+            title: "해석"
         )
     }
 }
@@ -34,54 +23,54 @@ struct InterpretationPanel: View {
 struct TimeInterpretationPanel: View {
     let reading: Reading
     let fortune: DayFortune
-    @Environment(AppState.self) private var appState
-    @Environment(ModelManager.self) private var modelManager
 
     private var dayKey: String {
         fortune.date.formatted(.iso8601.year().month().day())
     }
 
-    private var key: InterpretationStore.Key {
-        InterpretationStore.Key(
-            subject: "\(reading.person.id.uuidString)#\(dayKey)",
-            signature: reading.chart.signature,
-            engine: engineID(appState: appState, modelManager: modelManager)
-        )
-    }
-
     var body: some View {
         GenerationSurface(
-            key: key,
-            sections: fortune.sections,
-            interpreter: makeInterpreter(
-                appState: appState, modelManager: modelManager, facts: fortune.facts.summaryLines,
-                instructions: GemmaInterpreter.timeInstructions
+            key: .init(
+                subject: "\(reading.person.id.uuidString)#\(dayKey)",
+                signature: reading.chart.signature
             ),
-            title: "풀이",
-            emptyHint: "이 날의 기운을 풀어 씁니다."
+            sections: fortune.sections,
+            facts: fortune.facts.summaryLines,
+            instructions: GemmaInterpreter.timeInstructions,
+            title: "풀이"
         )
     }
 }
 
 // MARK: - 공통 생성 표면
 
-/// 생성 상태를 다루는 표면. 시작·중단·재개·재생성이 모두 여기에 모인다.
+/// 해석 표면 — 두 층을 함께 보여준다.
 ///
-/// 상태는 이 뷰가 아니라 InterpretationStore에 있다. 뷰가 사라졌다
-/// 나타나도, 인물을 바꿨다 돌아와도 만든 문장은 남는다.
+/// **기준선**: 규칙 엔진이 근거 원문을 조립한 문장. 계산과 함께 나오므로
+/// 항상 있고, 공짜이고, 사용자가 아무것도 하지 않아도 완결돼 있다.
+///
+/// **AI 문장**: 사용자가 버튼을 눌러 주문한 산출물. 있으면 기준선 위에
+/// 올라가고, 기준선은 접힌 채로 그 아래 남는다. 없으면 그냥 없다 —
+/// 그것이 정상 상태이며, 앱이 알아서 채우지 않는다.
+///
+/// 이 뷰에는 생성을 시작하는 경로가 `Button` 안에만 있다. `onAppear`와
+/// `onChange`는 디스크에서 읽어 오는 `restore`만 부른다.
+/// **읽기는 앱이 알아서, 쓰기는 사용자만.**
 struct GenerationSurface: View {
     let key: InterpretationStore.Key
     let sections: [InterpretationSection]
-    let interpreter: any Interpreter
+    let facts: [String]
+    let instructions: String
     let title: String
-    let emptyHint: String
 
     @Environment(InterpretationStore.self) private var store
     @Environment(AppState.self) private var appState
     @Environment(ModelManager.self) private var modelManager
 
-    private var document: InterpretationStore.Document { store.document(for: key) }
+    private var document: InterpretationStore.Document? { store.document(for: key) }
     private var phase: InterpretationStore.Phase { store.phase(for: key) }
+    /// AI 문장을 제시할 수 있는 상태인가. 적재 여부는 묻지 않는다.
+    private var aiOffered: Bool { appState.useLLM && modelManager.isAvailable }
 
     var body: some View {
         ScrollView {
@@ -98,10 +87,8 @@ struct GenerationSurface: View {
                     ForEach(sections) { section in
                         SectionCard(
                             section: section,
-                            text: document.sections[section.id]?.text ?? "",
-                            isComplete: document.sections[section.id]?.isComplete ?? false,
-                            isStreaming: isStreaming(section.id),
-                            emptyHint: emptyHint
+                            generated: document?.text(for: section.id),
+                            isStreaming: isStreaming(section.id)
                         )
                     }
                 }
@@ -110,8 +97,9 @@ struct GenerationSurface: View {
             .padding(16)
         }
         .navigationTitle(title)
-        .onAppear(perform: startIfNeeded)
-        .onChange(of: key) { startIfNeeded() }
+        // 읽기만 한다. 이 경로에서 생성이 시작되는 일은 없다.
+        .onAppear { store.restore(key: key) }
+        .onChange(of: key) { store.restore(key: key) }
     }
 
     private func isStreaming(_ id: String) -> Bool {
@@ -119,17 +107,12 @@ struct GenerationSurface: View {
         return false
     }
 
-    private func startIfNeeded() {
-        guard !sections.isEmpty else { return }
-        store.ensure(key: key, sections: sections, interpreter: interpreter)
-    }
-
     // MARK: - 상태 표시줄
 
     @ViewBuilder
     private var statusBar: some View {
         HStack(spacing: 8) {
-            engineLabel
+            provenanceLabel
             Spacer(minLength: 8)
             controls
         }
@@ -142,46 +125,56 @@ struct GenerationSurface: View {
                 .lineLimit(2)
         }
 
-        if appState.useLLM && !modelManager.isReady {
+        if let document, document.provenance.ruleSetVersion != SajuService.ruleSet.version {
+            // 근거 문장이 그 사이 바뀌었다. 조용히 지우지 않고 사용자에게
+            // 판단을 넘긴다 — 이미 읽은 문장이 이유 없이 달라지는 것이
+            // 더 나쁘다.
+            Label(
+                "이 문장은 근거 \(String(document.provenance.ruleSetVersion))판으로 쓰였습니다. 지금 근거는 \(String(SajuService.ruleSet.version))판입니다.",
+                systemImage: "clock.arrow.circlepath"
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+
+        if appState.useLLM && !modelManager.isAvailable {
             modelHint
         }
     }
 
-    private var engineLabel: some View {
+    /// 이 화면의 문장이 무엇으로 쓰였는지. **기록에서 읽는다.**
+    /// 현재 설정에서 추측하면, 설정을 바꾼 순간 이미 있는 문장의 출처가
+    /// 거짓으로 표시된다.
+    private var provenanceLabel: some View {
         HStack(spacing: 5) {
             switch phase {
+            case .preparingModel:
+                ProgressView().controlSize(.small).scaleEffect(0.7)
+                Text("모델을 불러오는 중…")
             case .running(_, let index, let total):
-                ProgressView()
-                    .controlSize(.small)
-                    .scaleEffect(0.7)
-                Text("생성 중 \(index)/\(total)")
+                ProgressView().controlSize(.small).scaleEffect(0.7)
+                Text("쓰는 중 \(index)/\(total)")
             case .stopped:
                 Image(systemName: "pause.circle")
-                Text("중단됨 · \(document.completedCount)/\(document.order.count) 완료")
-            case .done:
-                Image(systemName: appState.useLLM && modelManager.isReady ? "cpu" : "text.book.closed")
-                Text(engineName)
-            case .failed:
-                Image(systemName: "exclamationmark.triangle")
-                Text("생성 실패")
-            case .idle:
-                Image(systemName: appState.useLLM && modelManager.isReady ? "cpu" : "text.book.closed")
-                Text(engineName)
+                Text("중단됨 · \(document?.completedCount ?? 0)/\(sections.count) 섹션")
+            case .idle, .done, .failed:
+                if let document, document.isComplete {
+                    Image(systemName: "cpu")
+                    Text("\(document.provenance.modelName) · \(document.provenance.writtenAt.formatted(date: .abbreviated, time: .shortened))에 씀")
+                } else {
+                    Image(systemName: "text.book.closed")
+                    Text("근거 원문 해설")
+                }
             }
         }
         .foregroundStyle(.secondary)
     }
 
-    private var engineName: String {
-        if appState.useLLM, modelManager.isReady, let model = modelManager.activeModel {
-            return "\(model.displayName) · 온디바이스"
-        }
-        return "규칙 엔진"
-    }
-
     @ViewBuilder
     private var controls: some View {
         switch phase {
+        case .preparingModel:
+            EmptyView()
         case .running:
             Button {
                 store.stop(key: key)
@@ -190,49 +183,56 @@ struct GenerationSurface: View {
             }
             .controlSize(.small)
             .help("생성을 멈춥니다. 지금까지 만든 문장은 남습니다.")
-        case .stopped:
-            HStack(spacing: 6) {
-                Button {
-                    store.resume(key: key, sections: sections, interpreter: interpreter)
-                } label: {
-                    Label("이어서", systemImage: "play.fill")
+        case .stopped, .failed:
+            if aiOffered {
+                HStack(spacing: 6) {
+                    Button {
+                        store.resume(key: key, sections: sections, supplier: supplier)
+                    } label: {
+                        Label("이어서", systemImage: "play.fill")
+                    }
+                    .controlSize(.small)
+                    .help("남은 섹션부터 이어서 씁니다.")
+                    discardButton
                 }
-                .controlSize(.small)
-                .help("남은 섹션부터 이어서 생성합니다.")
-                regenerateButton
             }
-        case .failed:
-            HStack(spacing: 6) {
-                Button {
-                    store.resume(key: key, sections: sections, interpreter: interpreter)
-                } label: {
-                    Label("다시 시도", systemImage: "arrow.clockwise")
+        case .idle, .done:
+            if aiOffered {
+                HStack(spacing: 6) {
+                    Button {
+                        store.generate(key: key, sections: sections, supplier: supplier)
+                    } label: {
+                        Label(document == nil ? "AI로 다시 쓰기" : "새로 쓰기", systemImage: "wand.and.stars")
+                    }
+                    .controlSize(.small)
+                    .help(
+                        modelManager.needsLoadBeforeUse
+                            ? "모델을 불러온 뒤 근거를 문장으로 엮습니다. 처음 한 번은 몇 초 더 걸립니다."
+                            : "근거를 문장으로 엮습니다."
+                    )
+                    if document != nil { discardButton }
                 }
-                .controlSize(.small)
-                regenerateButton
             }
-        case .done, .idle:
-            regenerateButton
         }
     }
 
-    private var regenerateButton: some View {
+    private var discardButton: some View {
         Button {
-            store.regenerate(key: key, sections: sections, interpreter: interpreter)
+            store.discardDocument(key: key)
         } label: {
-            Label("새로 생성", systemImage: "arrow.clockwise")
+            Label("AI 문장 버리기", systemImage: "trash")
         }
         .controlSize(.small)
-        .help("처음부터 다시 씁니다.")
+        .help("AI가 쓴 문장을 지웁니다. 근거 원문 해설은 그대로 남습니다.")
     }
 
     private var modelHint: some View {
         HStack(spacing: 8) {
-            Image(systemName: "arrow.down.circle")
+            Image(systemName: "wand.and.stars")
             VStack(alignment: .leading, spacing: 2) {
-                Text("AI 해설을 쓰려면 모델을 설치하세요")
+                Text("AI로 다시 쓰려면 모델을 고르세요")
                     .font(.callout)
-                Text("설정 → 모델에서 Gemma 4를 내려받으면 문장이 자연스러워집니다. 지금도 규칙 엔진 해설은 완전하게 동작합니다.")
+                Text("설정 → 모델에서 Gemma 4를 내려받으면 같은 근거를 매끄러운 문장으로 엮습니다. 지금 보이는 해설도 그대로 완전합니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -250,22 +250,48 @@ struct GenerationSurface: View {
             .foregroundStyle(.tertiary)
             .padding(.top, 4)
     }
+
+    /// 생성 재료를 준비하는 쪽. 모델 적재가 여기서 일어나므로, 사용자가
+    /// 설정 화면에 다시 갈 이유가 없다.
+    private var supplier: InterpretationStore.Supplier {
+        let manager = modelManager
+        let facts = facts
+        let instructions = instructions
+        return {
+            guard let container = await manager.prepare(),
+                  let model = manager.preferredModel
+            else { return nil }
+            return (
+                GemmaInterpreter(container: container, facts: facts, instructions: instructions),
+                InterpretationStore.Provenance(
+                    modelID: model.id,
+                    modelName: model.displayName,
+                    writtenAt: Date(),
+                    appVersion: AppVersion.marketing,
+                    ruleSetVersion: SajuService.ruleSet.version
+                )
+            )
+        }
+    }
 }
 
 /// 섹션 카드 — 제목, 본문, 근거 칩.
+///
+/// 본문은 한 자리다. AI 문장이 있으면 그것이 본문이고 기준선은 접혀서
+/// 아래 남는다. 두 텍스트가 같은 자리를 다투게 두면 사용자는 지금 무엇을
+/// 읽고 있는지 모른다.
 struct SectionCard: View {
     let section: InterpretationSection
-    let text: String
-    let isComplete: Bool
+    let generated: String?
     let isStreaming: Bool
-    let emptyHint: String
     @State private var selectedRule: Rule?
+    @State private var showsBaseline = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Rectangle()
-                    .fill(isComplete ? Ink.cinnabar : Color.secondary.opacity(0.4))
+                    .fill(generated == nil ? Color.secondary.opacity(0.4) : Ink.cinnabar)
                     .frame(width: 3, height: 14)
                 Text(section.title)
                     .font(.headline)
@@ -276,16 +302,26 @@ struct SectionCard: View {
                 }
             }
 
-            if text.isEmpty {
-                Text(isStreaming ? "쓰는 중…" : emptyHint)
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
-            } else {
-                Text(text)
-                    .font(.body)
-                    .lineSpacing(4)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            Text(generated ?? section.baselineText)
+                .font(.body)
+                .lineSpacing(4)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if generated != nil {
+                DisclosureGroup(isExpanded: $showsBaseline) {
+                    Text(section.baselineText)
+                        .font(.callout)
+                        .lineSpacing(3)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 6)
+                } label: {
+                    Text("근거 원문 해설")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             // 근거 칩 — 이 문단이 어떤 명리 규칙에서 왔는가.
@@ -332,25 +368,4 @@ struct SectionCard: View {
             .frame(width: 330)
         }
     }
-}
-
-// MARK: - 해석기 선택
-
-@MainActor
-func engineID(appState: AppState, modelManager: ModelManager) -> String {
-    if appState.useLLM, modelManager.isReady, let id = modelManager.activeModelID {
-        return id
-    }
-    return "template"
-}
-
-@MainActor
-func makeInterpreter(
-    appState: AppState, modelManager: ModelManager,
-    facts: [String], instructions: String
-) -> any Interpreter {
-    if appState.useLLM, let container = modelManager.container {
-        return GemmaInterpreter(container: container, facts: facts, instructions: instructions)
-    }
-    return TemplateInterpreter()
 }

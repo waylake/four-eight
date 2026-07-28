@@ -2,35 +2,55 @@ import Foundation
 import Observation
 import SajuKit
 
-/// 생성된 해석의 보관소.
+/// **AI가 쓴 해석문**의 보관소.
 ///
-/// 해석은 뷰의 상태가 아니라 문서의 상태다. 인물을 바꿨다 돌아와도,
-/// 창을 다시 열어도, 시트를 띄웠다 닫아도 이미 만든 문장은 남아야 한다.
-/// 뷰에 두면 SwiftUI가 뷰를 다시 만들 때마다 처음부터 생성한다.
+/// 규칙 엔진 문장은 여기 없다. 그것은 `InterpretationSection.baselineText`로
+/// 계산과 함께 나오며, 화면에 항상 있다. 이 보관소가 다루는 것은 사용자가
+/// 시간과 배터리를 들여 주문한 산출물 하나뿐이다.
 ///
-/// 중단과 재개도 이 구조가 있어야 성립한다. 섹션 단위로 완료를 기록하므로
-/// 재개는 "미완료 섹션부터"라는 명확한 의미를 갖는다.
+/// 둘을 한 슬롯에 넣었을 때 실제로 벌어진 일:
+/// 캐시 키에 엔진 종류가 들어 있어서, 모델을 켜는 것이 "캐시 전체 무효화"와
+/// 같은 의미가 됐다. 사용자는 문장을 갈아치우라고 한 적이 없는데 앱은
+/// 빈 캐시를 발견하고 성실하게 채웠다. 지금 키에 엔진이 없는 이유다.
+///
+/// 규칙 하나: **읽기는 앱이 알아서, 쓰기는 사용자만.**
+/// `restore`는 뷰가 나타날 때 불러도 좋다. `generate`는 버튼만 부른다.
 @MainActor
 @Observable
 final class InterpretationStore {
-    /// 어떤 내용을, 어떤 엔진으로 만들었는지까지 포함한 키.
-    /// 유파 옵션을 바꾸면 명식 서명이 바뀌므로 자동으로 새 키가 된다.
-    struct Key: Hashable {
-        let subject: String       // 인물 ID 또는 "today:2026-07-28"
+    /// 무엇에 대한 해석인가. 어떤 엔진으로 만들었는지는 키가 아니라 기록이다.
+    ///
+    /// 유파 옵션을 바꾸면 명식 서명이 바뀌므로 자동으로 다른 문서가 된다.
+    struct Key: Hashable, Sendable {
+        let subject: String       // 인물 ID 또는 "인물 ID#2026-07-28"
         let signature: String     // 명식 서명
-        let engine: String        // "template" 또는 모델 ID
     }
 
-    struct SectionState {
+    /// 이 문장을 누가 언제 무엇으로 썼는가.
+    ///
+    /// 표시용 라벨을 "현재 설정"에서 뽑으면 거짓말이 된다. 설정을 바꾸는
+    /// 순간 이미 화면에 있는 문장의 출처 표기가 바뀌기 때문이다.
+    /// 라벨은 예측이 아니라 기록에서 나와야 한다.
+    struct Provenance: Codable, Sendable, Hashable {
+        var modelID: String
+        var modelName: String
+        var writtenAt: Date
+        var appVersion: String
+        /// 근거 콘텐츠 판(rules.json version). 이 값이 지금과 다르면
+        /// 그 사이 근거 문장이 바뀐 것이므로 화면에 표시한다.
+        var ruleSetVersion: Int
+    }
+
+    struct SectionState: Codable, Sendable, Hashable {
         var text: String = ""
         var isComplete: Bool = false
     }
 
-    struct Document {
+    struct Document: Codable, Sendable {
         var order: [String] = []
         var titles: [String: String] = [:]
-        var evidence: [String: [Rule]] = [:]
         var sections: [String: SectionState] = [:]
+        var provenance: Provenance
 
         var isComplete: Bool {
             !order.isEmpty && order.allSatisfy { sections[$0]?.isComplete == true }
@@ -42,24 +62,45 @@ final class InterpretationStore {
         var completedCount: Int {
             order.filter { sections[$0]?.isComplete == true }.count
         }
+        func text(for sectionID: String) -> String? {
+            guard let state = sections[sectionID], !state.text.isEmpty else { return nil }
+            return state.text
+        }
     }
 
     enum Phase: Equatable {
         case idle
+        /// 모델을 메모리에 올리는 중. 생성의 일부이지 별도의 설정 단계가 아니다.
+        case preparingModel
         case running(section: String, index: Int, total: Int)
         case stopped
         case done
         case failed(String)
     }
 
+    /// 생성에 필요한 재료를 그때그때 준비하는 쪽. 모델 적재가 여기서 일어난다.
+    /// nil을 돌려주면 준비 실패다.
+    typealias Supplier = @MainActor () async -> (interpreter: any Interpreter, provenance: Provenance)?
+
     private(set) var documents: [Key: Document] = [:]
     private(set) var phases: [Key: Phase] = [:]
     private var tasks: [Key: Task<Void, Never>] = [:]
+    private var restored: Set<Key> = []
+
+    init(prunesArchive: Bool = true) {
+        guard prunesArchive else { return }
+        // 보존 기한 정리는 시작을 늦출 이유가 없다.
+        Task.detached(priority: .background) {
+            InterpretationArchive.prune()
+        }
+    }
 
     // MARK: - 조회
 
-    func document(for key: Key) -> Document {
-        documents[key] ?? Document()
+    /// AI가 쓴 문서. nil이면 아직 주문한 적이 없다는 뜻이며, 화면은
+    /// 기준선 문장을 보여준다. nil은 실패가 아니라 정상 상태다.
+    func document(for key: Key) -> Document? {
+        documents[key]
     }
 
     func phase(for key: Key) -> Phase {
@@ -69,32 +110,37 @@ final class InterpretationStore {
     /// 실행 중 판정은 phase가 아니라 task로 한다.
     ///
     /// phase는 첫 청크가 도착해야 .running이 된다. 그 사이에 뷰가 다시
-    /// 나타나면 ensure가 한 번 더 통과해 같은 섹션에 두 번 이어붙는다.
-    /// 실제로 이 버그가 스크린샷에서 잡혔다.
+    /// 나타나면 같은 섹션에 두 번 이어붙는다. 실제로 겪은 버그다.
     func isRunning(_ key: Key) -> Bool {
         tasks[key] != nil
     }
 
-    // MARK: - 생성 제어
-
-    /// 캐시가 없을 때만 생성을 시작한다. 뷰가 다시 나타나도 안전하다.
-    ///
-    /// 사용자가 시키지 않으면 재생성하지 않는다는 원칙이 여기에 있다.
-    /// 계산은 공짜지만 생성은 배터리와 시간이다.
-    func ensure(key: Key, sections: [InterpretationSection], interpreter: any Interpreter) {
-        guard !isRunning(key) else { return }
-        let doc = document(for: key)
-        if doc.isComplete { return }
-        if case .stopped = phase(for: key) { return }   // 중단은 사용자의 의사다.
-        run(key: key, sections: sections, interpreter: interpreter, resuming: !doc.order.isEmpty)
+    /// 디스크에서 되살린다. 뷰가 나타날 때 불러도 안전하다 — 읽기뿐이고,
+    /// 없으면 아무 일도 하지 않는다. **이 메서드는 절대 생성하지 않는다.**
+    func restore(key: Key) {
+        guard !restored.contains(key) else { return }
+        restored.insert(key)
+        guard documents[key] == nil,
+              let document = InterpretationArchive.load(
+                  subject: key.subject, signature: key.signature
+              )
+        else { return }
+        documents[key] = document
+        phases[key] = document.isComplete ? .done : .stopped
     }
 
-    /// 사용자가 명시적으로 요청한 재생성. 캐시를 버린다.
-    func regenerate(key: Key, sections: [InterpretationSection], interpreter: any Interpreter) {
-        tasks[key]?.cancel()
-        tasks[key] = nil
-        documents[key] = nil
-        run(key: key, sections: sections, interpreter: interpreter, resuming: false)
+    // MARK: - 생성 — 사용자의 행위
+
+    /// 처음부터 쓴다. 버튼에서만 불린다.
+    func generate(key: Key, sections: [InterpretationSection], supplier: @escaping Supplier) {
+        guard !isRunning(key) else { return }
+        run(key: key, sections: sections, supplier: supplier, resuming: false)
+    }
+
+    /// 중단·실패 지점부터 이어 쓴다.
+    func resume(key: Key, sections: [InterpretationSection], supplier: @escaping Supplier) {
+        guard !isRunning(key) else { return }
+        run(key: key, sections: sections, supplier: supplier, resuming: documents[key] != nil)
     }
 
     /// 중단. 만들어 둔 문장은 남긴다.
@@ -102,12 +148,31 @@ final class InterpretationStore {
         tasks[key]?.cancel()
         tasks[key] = nil
         phases[key] = .stopped
+        persist(key)
     }
 
-    /// 재개. 미완료 섹션부터 이어간다.
-    func resume(key: Key, sections: [InterpretationSection], interpreter: any Interpreter) {
-        guard !isRunning(key) else { return }
-        run(key: key, sections: sections, interpreter: interpreter, resuming: true)
+    /// 사용자가 AI 문장을 버린다. 기준선은 원래 지울 수 있는 것이 아니다.
+    func discardDocument(key: Key) {
+        tasks[key]?.cancel()
+        tasks[key] = nil
+        documents[key] = nil
+        phases[key] = .idle
+        InterpretationArchive.remove(subject: key.subject, signature: key.signature)
+    }
+
+    /// 인물이 사라졌을 때 정리. 그 인물의 날짜별 풀이까지 함께 지운다.
+    func discard(subject: String) {
+        for key in documents.keys where key.subject.hasPrefix(subject) {
+            tasks[key]?.cancel()
+            tasks[key] = nil
+            documents[key] = nil
+            phases[key] = nil
+            restored.remove(key)
+        }
+        let prefix = subject
+        Task.detached(priority: .utility) {
+            InterpretationArchive.removeAll(subjectPrefix: prefix)
+        }
     }
 
     // MARK: - 실행
@@ -115,74 +180,87 @@ final class InterpretationStore {
     private func run(
         key: Key,
         sections: [InterpretationSection],
-        interpreter: any Interpreter,
+        supplier: @escaping Supplier,
         resuming: Bool
     ) {
-        var doc = resuming ? document(for: key) : Document()
-        doc.order = sections.map(\.id)
-        for section in sections {
-            doc.titles[section.id] = section.title
-            doc.evidence[section.id] = section.rules
-            if doc.sections[section.id] == nil {
-                doc.sections[section.id] = SectionState()
-            }
-        }
-        // 끊긴 섹션은 부분 문장을 버리고 다시 만든다. 문장 중간에서
-        // 이어붙이면 앞뒤가 어긋난 글이 나온다.
-        if let incomplete = doc.firstIncomplete {
-            doc.sections[incomplete] = SectionState()
-        }
-        documents[key] = doc
-
-        let pending = sections.filter { doc.sections[$0.id]?.isComplete != true }
-        guard !pending.isEmpty else {
-            phases[key] = .done
-            return
-        }
-
         let total = sections.count
-        let stream = interpreter.stream(sections: pending)
-        // Task를 만들기 전에 상태를 잡아 둔다. 첫 청크를 기다리는 사이에
-        // 다른 호출이 들어오면 같은 섹션이 두 번 생성된다.
-        if let first = pending.first {
-            let index = (doc.order.firstIndex(of: first.id) ?? 0) + 1
-            phases[key] = .running(section: first.id, index: index, total: total)
-        }
+        phases[key] = .preparingModel
 
+        // Task를 먼저 등록한다. 모델 적재는 수 초가 걸리고, 그 사이에
+        // 버튼이 다시 눌리면 같은 문서를 두 번 쓴다.
         tasks[key] = Task { [weak self] in
+            guard let prepared = await supplier() else {
+                self?.phases[key] = .failed("모델을 불러오지 못했습니다.")
+                self?.tasks[key] = nil
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+
+            var doc = resuming ? (documents[key] ?? Document(provenance: prepared.provenance))
+                               : Document(provenance: prepared.provenance)
+            doc.provenance = prepared.provenance
+            doc.order = sections.map(\.id)
+            for section in sections {
+                doc.titles[section.id] = section.title
+                if doc.sections[section.id] == nil {
+                    doc.sections[section.id] = SectionState()
+                }
+            }
+            // 끊긴 섹션은 부분 문장을 버리고 다시 만든다. 문장 중간에서
+            // 이어붙이면 앞뒤가 어긋난 글이 나온다.
+            if let incomplete = doc.firstIncomplete {
+                doc.sections[incomplete] = SectionState()
+            }
+            documents[key] = doc
+
+            let pending = sections.filter { doc.sections[$0.id]?.isComplete != true }
+            guard !pending.isEmpty else {
+                phases[key] = .done
+                tasks[key] = nil
+                persist(key)
+                return
+            }
+            if let first = pending.first {
+                let index = (doc.order.firstIndex(of: first.id) ?? 0) + 1
+                phases[key] = .running(section: first.id, index: index, total: total)
+            }
+
             do {
-                for try await chunk in stream {
-                    guard let self, !Task.isCancelled else { return }
+                for try await chunk in prepared.interpreter.stream(sections: pending) {
+                    guard !Task.isCancelled else { return }
                     switch chunk {
                     case .sectionStart(let id):
-                        let index = (self.documents[key]?.order.firstIndex(of: id) ?? 0) + 1
-                        self.phases[key] = .running(section: id, index: index, total: total)
+                        let index = (documents[key]?.order.firstIndex(of: id) ?? 0) + 1
+                        phases[key] = .running(section: id, index: index, total: total)
                     case .text(let id, let delta):
-                        self.documents[key]?.sections[id, default: SectionState()].text += delta
+                        documents[key]?.sections[id, default: SectionState()].text += delta
                     case .sectionEnd(let id):
-                        self.documents[key]?.sections[id]?.isComplete = true
+                        documents[key]?.sections[id]?.isComplete = true
+                        // 섹션 단위로 보관한다. 여기서 앱이 죽어도 완성된
+                        // 섹션은 남고, 다음 실행은 남은 것부터 이어간다.
+                        persist(key)
                     case .done:
                         break
                     }
                 }
-                guard let self, !Task.isCancelled else { return }
-                self.phases[key] = self.document(for: key).isComplete ? .done : .stopped
+                guard !Task.isCancelled else { return }
+                phases[key] = (documents[key]?.isComplete ?? false) ? .done : .stopped
             } catch is CancellationError {
                 // 중단은 stop()이 이미 표시했다.
             } catch {
-                self?.phases[key] = .failed(error.localizedDescription)
+                phases[key] = .failed(error.localizedDescription)
             }
-            self?.tasks[key] = nil
+            persist(key)
+            tasks[key] = nil
         }
     }
 
-    /// 인물이 사라졌을 때 정리.
-    func discard(subject: String) {
-        for key in documents.keys where key.subject == subject {
-            tasks[key]?.cancel()
-            tasks[key] = nil
-            documents[key] = nil
-            phases[key] = nil
+    private func persist(_ key: Key) {
+        guard let document = documents[key] else { return }
+        let subject = key.subject
+        let signature = key.signature
+        Task.detached(priority: .utility) {
+            InterpretationArchive.save(subject: subject, signature: signature, document: document)
         }
     }
 }

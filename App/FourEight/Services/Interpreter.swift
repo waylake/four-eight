@@ -12,29 +12,15 @@ enum InterpretationChunk: Sendable {
 
 /// 해석기 — 확정된 사실과 근거를 문장으로 옮긴다.
 ///
+/// 여기 있는 것은 **비용을 치르는 경로뿐이다.** 규칙 엔진 문장은 해석기가
+/// 아니라 `InterpretationSection.baselineText`, 즉 계산 결과의 일부다.
+/// 예전에는 규칙 엔진도 이 프로토콜을 구현했는데, 그래서 "해석문을 만든다"는
+/// 한 동작에 밀리초짜리와 수십 초짜리가 섞였고 정책도 하나로 묶였다.
+///
 /// 섹션 부분집합을 받는 것이 중요하다. 재개는 "미완료 섹션만 다시"이므로
 /// 해석기가 전체 문서를 전제하면 안 된다.
 protocol Interpreter: Sendable {
     func stream(sections: [InterpretationSection]) -> AsyncThrowingStream<InterpretationChunk, Error>
-}
-
-// MARK: - 템플릿 해석기
-
-/// 결정론적 폴백 — 근거 원문을 그대로 조립한다.
-/// 모델이 없어도 앱이 완전한 이유이며, 내용은 Gemma 경로와 동일하다.
-struct TemplateInterpreter: Interpreter {
-    func stream(sections: [InterpretationSection]) -> AsyncThrowingStream<InterpretationChunk, Error> {
-        AsyncThrowingStream { continuation in
-            for section in sections {
-                continuation.yield(.sectionStart(id: section.id))
-                let text = section.rules.map(\.text).joined(separator: "\n\n")
-                continuation.yield(.text(sectionID: section.id, delta: text))
-                continuation.yield(.sectionEnd(id: section.id))
-            }
-            continuation.yield(.done)
-            continuation.finish()
-        }
-    }
 }
 
 // MARK: - Gemma 해석기

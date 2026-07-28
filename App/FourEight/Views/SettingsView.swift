@@ -55,8 +55,8 @@ struct SchoolSettingsView: View {
                 }
             }
             Section("해석") {
-                Toggle("온디바이스 AI 해설 사용", isOn: $state.useLLM)
-                Text("끄면 규칙 엔진이 근거 문장을 그대로 조립합니다. 어느 쪽이든 계산과 근거는 동일합니다.")
+                Toggle("온디바이스 AI 기능 제시", isOn: $state.useLLM)
+                Text("해설은 항상 근거 원문으로 조립돼 있습니다. 이 스위치는 그것을 AI 문장으로 다시 쓰는 버튼과 대화 기능을 보이게 할지만 정합니다. 켜 두어도 사용자가 누르지 않으면 생성하지 않습니다.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -79,9 +79,12 @@ struct ModelManagerView: View {
                 } header: {
                     Text("Gemma 4 (Apache 2.0)")
                 } footer: {
-                    Text("모델은 Hugging Face에서 내려받아 이 Mac에만 저장됩니다. 다운로드 후 해석은 네트워크 없이 동작합니다.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("모델은 Hugging Face에서 내려받아 이 Mac에만 저장됩니다. 다운로드 후 해석은 네트워크 없이 동작합니다.")
+                        Text("한 번 고르면 앱을 껐다 켜도 선택이 남습니다. 메모리 적재는 AI 문장을 처음 주문할 때 자동으로 일어나므로, 이 화면에 다시 오실 일은 없습니다.")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
@@ -121,22 +124,29 @@ struct ModelRow: View {
         }
         .padding(.vertical, 4)
         .contextMenu {
-            if case .installed = modelManager.states[model.id] {
-                Button("모델 삭제", role: .destructive) { modelManager.delete(model) }
-            }
-            if case .loaded = modelManager.states[model.id] {
+            if modelManager.loadedModelID == model.id {
                 Button("메모리에서 내리기") { modelManager.unload() }
+                    .help("선택은 그대로 남습니다. 다음에 필요할 때 다시 올립니다.")
+            }
+            if modelManager.preferredModelID == model.id {
+                Button("이 모델 쓰지 않기") { modelManager.stopUsing() }
+            }
+            if modelManager.isInstalled(model) {
                 Button("모델 삭제", role: .destructive) { modelManager.delete(model) }
             }
         }
     }
 
+    private var isPreferred: Bool { modelManager.preferredModelID == model.id }
+
+    /// 상태 표기는 세 층을 그대로 따른다. "사용 중"과 "메모리에 있음"을
+    /// 구분해서 말해야, 앱을 껐다 켠 사용자가 설정이 풀렸다고 오해하지 않는다.
     @ViewBuilder
     private var stateControl: some View {
         switch modelManager.states[model.id] ?? .notInstalled {
         case .notInstalled:
-            Button("설치 후 사용") {
-                Task { await modelManager.activate(model) }
+            Button("내려받아 사용") {
+                Task { await modelManager.choose(model) }
             }
         case .downloading(let progress):
             HStack(spacing: 6) {
@@ -147,20 +157,39 @@ struct ModelRow: View {
                     .foregroundStyle(.secondary)
             }
         case .installed:
-            Button("사용") {
-                Task { await modelManager.activate(model) }
+            if isPreferred {
+                VStack(alignment: .trailing, spacing: 1) {
+                    Label("사용할 모델", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(Ink.cinnabar)
+                        .font(.callout)
+                    Text("필요할 때 불러옵니다")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            } else {
+                Button("사용") {
+                    Task { await modelManager.choose(model) }
+                }
             }
         case .loading:
-            ProgressView()
-                .controlSize(.small)
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("불러오는 중")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         case .loaded:
-            Label("사용 중", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(Ink.cinnabar)
-                .labelStyle(.titleAndIcon)
-                .font(.callout)
+            VStack(alignment: .trailing, spacing: 1) {
+                Label("사용할 모델", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(Ink.cinnabar)
+                    .font(.callout)
+                Text("메모리에 올라 있음")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         case .failed(let message):
             Button("재시도") {
-                Task { await modelManager.activate(model) }
+                Task { await modelManager.choose(model) }
             }
             .help(message)
         }
