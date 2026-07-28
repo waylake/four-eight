@@ -22,6 +22,12 @@
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/waylake/four-eight?style=flat" alt="License"></a>
 </p>
 
+<p align="center">
+  <a href="https://waylake.github.io/four-eight/"><b>소개 페이지</b></a> ·
+  <a href="https://github.com/waylake/four-eight/releases/latest">다운로드</a> ·
+  <a href="./CHANGELOG.md">변경 내역</a>
+</p>
+
 ## 소개
 
 four-eight는 명식을 세우는 순서를 지킵니다. 월주를 관할하는 절기의 정확한 순간을 먼저 확정하고, 출생지 경도와 한국의 역대 표준시를 보정한 뒤에야 육십갑자를 부릅니다. 계산은 결정론적 Swift 엔진이 담당합니다. 로컬 언어 모델은 선택 사항이며, 그 결과를 받아 오직 한 가지 일만 합니다. 읽기 좋은 한국어로 바꾸는 것입니다.

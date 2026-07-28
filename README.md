@@ -22,6 +22,12 @@
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/waylake/four-eight?style=flat" alt="License"></a>
 </p>
 
+<p align="center">
+  <a href="https://waylake.github.io/four-eight/"><b>Website</b></a> ·
+  <a href="https://github.com/waylake/four-eight/releases/latest">Download</a> ·
+  <a href="./CHANGELOG.md">Changelog</a>
+</p>
+
 ## About
 
 four-eight reads a Four Pillars chart the way a careful practitioner would: it resolves the exact instant of the governing solar term, corrects for the longitude of the birthplace and for Korea's historical time zones, and only then names the sixty-cycle stems and branches. The chart is computed by a deterministic Swift engine. A local language model — if you choose to install one — is given those results and asked to do one thing: turn them into readable Korean prose.
