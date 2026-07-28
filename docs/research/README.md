@@ -45,6 +45,7 @@
 | [manseryeok-validation.md](./manseryeok-validation.md) | 절기 시각·표준시 연혁·공개 사주 사례 7건의 골든 데이터. 값은 `SajuKit`의 `SolarTermReferenceTests.swift`와 `PublishedCaseTests.swift`에 테스트로 고정되어 있다 |
 | [on-device-llm.md](./on-device-llm.md) | Gemma 4와 mlx-swift-lm 3.31.4의 검증된 스펙, 모델 ID와 크기, Apache 2.0 라이선스 확인, chat template |
 | [interpretation-content.md](./interpretation-content.md) | `rules.json` 해석 룰 60개의 집필 원칙, 스키마와 태그 규약, 태그 매칭을 벡터 검색으로 만들지 않은 이유 |
+| [consultation-ux.md](./consultation-ux.md) | 상담 화면의 사용성 진단(행 길이가 WCAG의 CJK 상한 초과, 죽은 근거 칩, retopic이 인용을 어긋나게 하는 경로 등 정합성 결함 5건)과 웹 AI 채팅 UI의 실제 관례. 근거 등급 표기, 미확인 19건 보존 |
 | [remote-llm-providers.md](./remote-llm-providers.md) | OpenAI 호환을 자칭하는 구현 11곳의 실제 분기, 401 응답 실측, 한도 헤더 두 계열의 형식 차이, opencode Zen·Go의 규격 라우팅. 자료 간 불일치 7건과 미확인 항목을 그대로 보존 |
 | [macos-network-and-keychain.md](./macos-network-and-keychain.md) | ad-hoc 서명 + 샌드박스에서 키체인·ATS·로컬 네트워크 권한이 실제로 어떻게 동작하는지 실측. `.lines`가 SSE의 빈 줄을 버린다는 측정, 취소가 `URLError(.cancelled)`로 오는 측정. 문서와 실측이 어긋나는 지점을 양쪽 다 기록 |
 | [consultation-safety.md](./consultation-safety.md) | 정신건강 성격 AI 챗봇의 규제 조문(Utah·Nevada·Illinois·California·EU AI Act·Apple), 위기 대응 관행, 4B 모델의 멀티턴 한계 측정치, MLX Swift 컨텍스트 관리의 알려진 결함 |
