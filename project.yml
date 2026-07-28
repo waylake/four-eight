@@ -87,6 +87,13 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
+        # Apple Silicon 전용으로 고정한다.
+        #
+        # MLX는 Metal 기반이라 Apple Silicon에서만 동작한다. x86_64 슬라이스를
+        # 만들어도 모델을 로드하는 순간 쓸 수 없고, 빌드 시간만 두 배가 되며
+        # 쓰지 못할 코드가 번들에 들어간다.
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: NO
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
         # Hardened Runtime은 Library Validation을 포함한다. ad-hoc 서명과

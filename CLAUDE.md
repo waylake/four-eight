@@ -284,6 +284,7 @@ VSOP87 Swift 소스는 생성물입니다. 커밋하고, CI가 재생성해서 �
 | 공식 homebrew-cask 등재 거부 | audit이 `gktool scan`으로 공증을 강제. 미공증 앱은 자체 tap만 가능 |
 | `depends_on macos: ">= :sequoia"` 경고 | Homebrew 6에서 문자열 비교 형태는 deprecated. `depends_on macos: :sequoia` |
 | 업데이트가 조용히 무시됨 | `CFBundleVersion`이 이전보다 낮음. Sparkle은 다운그레이드를 무시하며 오류도 내지 않음 |
+| 릴리스 빌드가 두 배로 오래 걸림 | Xcode가 x86_64까지 빌드. Apple Silicon 전용 의존성이 있으면 `ARCHS: arm64`로 고정할 것 |
 | `xcodebuild` 매크로/플러그인 실패 | `-skipMacroValidation -skipPackagePluginValidation` 둘 다 필요 |
 
 ---

@@ -75,7 +75,7 @@ four-eight는 명식을 세우는 순서를 지킵니다. 월주를 관할하는
 | | |
 |---|---|
 | macOS | 15.0 이상 |
-| 칩 | Apple Silicon (온디바이스 AI에 필요. 계산 엔진 자체는 제약 없음) |
+| 칩 | Apple Silicon (M1 이상). MLX가 Metal 기반이라 Intel Mac은 지원하지 않습니다 |
 | 디스크 | Gemma 4 E2B 약 3.6 GB, E4B 약 5.2 GB — 선택 사항 |
 | 빌드 | Xcode 26.2 이상, [XcodeGen](https://github.com/yonaskolb/XcodeGen) |
 

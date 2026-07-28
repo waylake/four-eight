@@ -75,7 +75,7 @@ The calendar never labels a day good or bad. It marks days that *contact* your c
 | | |
 |---|---|
 | macOS | 15.0 or later |
-| Chip | Apple Silicon (required for on-device AI; the engine itself runs anywhere) |
+| Chip | Apple Silicon (M1 or later). Intel Macs are not supported — MLX is Metal-based |
 | Disk | ~3.6 GB for Gemma 4 E2B, ~5.2 GB for E4B — optional |
 | Build | Xcode 26.2+, [XcodeGen](https://github.com/yonaskolb/XcodeGen) |
 

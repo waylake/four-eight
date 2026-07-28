@@ -20,6 +20,14 @@ jobs:
       - name: Toolchain
         run: swift --version && xcodebuild -version
 
+      - name: Build cache
+        uses: actions/cache@v4
+        with:
+          path: SajuKit/.build
+          key: swiftpm-${{ runner.os }}-${{ hashFiles('SajuKit/Package.swift') }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-
+
       - name: Test
         working-directory: SajuKit
         run: swift test
@@ -36,11 +44,26 @@ jobs:
       - name: Generate project
         run: xcodegen generate
 
+      # CI에서는 컴파일 산출물까지 캐시한다. 결과가 어긋나도 비용이
+      # 낮고, 키가 어긋나면 그냥 클린 빌드로 떨어진다.
+      - name: Build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/SourcePackages
+            build/Build/Intermediates.noindex
+            ~/Library/Caches/org.swift.swiftpm
+          key: xcode-ci-${{ runner.os }}-${{ hashFiles('project.yml') }}-${{ github.sha }}
+          restore-keys: |
+            xcode-ci-${{ runner.os }}-${{ hashFiles('project.yml') }}-
+            xcode-ci-${{ runner.os }}-
+
       - name: Build
         run: |
           xcodebuild -project FourEight.xcodeproj \
                      -scheme FourEight \
                      -configuration Debug \
+                     -derivedDataPath build \
                      -skipMacroValidation \
                      -skipPackagePluginValidation \
                      CODE_SIGNING_ALLOWED=NO \

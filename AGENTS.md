@@ -19,6 +19,7 @@ AI 코딩 에이전트가 이 저장소에서 작업할 때 알아야 할 것들
 | `SUFeedURL` | `https://waylake.github.io/four-eight/appcast.xml` | 구버전 앱이 이 주소만 확인합니다 |
 | `SUPublicEDKey` | `8MN3DdiGkKYCAbDUs3stVtsWDMgl5nPB1DwriETkTIg=` | Sparkle이 키 제거를 거부합니다. 교체만 가능합니다 |
 | `ENABLE_HARDENED_RUNTIME` | `false` | ad-hoc 서명과 겹치면 Sparkle 로드가 실패합니다. Developer ID가 생기기 전까지 켜지 마세요 |
+| `ARCHS` | `arm64` | MLX는 Metal 기반이라 Apple Silicon 전용입니다. x86_64 슬라이스는 동작하지 않으면서 빌드 시간만 두 배로 만듭니다 |
 
 **`appcast.xml`을 소급 수정하지 마세요.** append-only로 다룹니다. 잘못 나간 항목은 지우지 말고 더 높은 빌드 번호로 새 릴리스를 올려 덮습니다.
 

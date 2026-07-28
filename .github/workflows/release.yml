@@ -57,6 +57,20 @@ jobs:
       - name: 프로젝트 생성
         run: xcodegen generate
 
+      # 릴리스 빌드에서는 소스 체크아웃만 캐시한다. 컴파일 산출물까지
+      # 캐시하면 오래된 결과가 섞여 들어갈 위험이 생기는데, 사용자에게
+      # 나가는 바이너리에서는 그 위험을 감수할 이유가 없다.
+      # 아키텍처를 arm64로 고정한 것만으로 컴파일 시간이 절반이 된다.
+      - name: SPM 체크아웃 캐시
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/SourcePackages
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-release-${{ runner.os }}-${{ hashFiles('project.yml') }}
+          restore-keys: |
+            spm-release-${{ runner.os }}-
+
       - name: 릴리스 빌드
         run: |
           xcodebuild -project FourEight.xcodeproj \
