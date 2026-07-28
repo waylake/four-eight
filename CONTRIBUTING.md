@@ -39,6 +39,14 @@ test(pillars): 1955년 서머타임 사례 추가
 
 유파에 따라 갈리는 지점이라면 어느 한쪽을 정답으로 만들지 말고 `SajuOptions`에 옵션을 추가하세요. 근거는 [ADR 0005](./docs/adr/0005-expose-school-differences-as-settings.md)에 있습니다.
 
+## 릴리스
+
+릴리스는 메인테이너가 합니다. 태그를 찍거나 버전을 올리는 PR은 보내지 마세요.
+
+`CHANGELOG.md`의 `## [Unreleased]` 아래에 변경 내용을 추가하는 것은 환영합니다. 릴리스 노트가 거기서 나옵니다.
+
+절차가 궁금하시면 [docs/release.md](./docs/release.md)에 있습니다.
+
 ## 구조를 바꿀 때
 
 되돌리기 어려운 결정이라면 [ADR](./docs/adr/)을 함께 작성해 주세요. 형식은 가볍습니다. 맥락, 결정, 결과 세 절이면 됩니다.

@@ -58,6 +58,15 @@ xcodebuild -project FourEight.xcodeproj -scheme FourEight \
 
 두 플래그가 필요합니다. `-skipMacroValidation`은 `mlx-swift-lm`의 `MLXHuggingFaceMacros`가, `-skipPackagePluginValidation`은 `mlx-swift`의 `CudaBuild` 빌드 플러그인이 신뢰 승인을 요구하기 때문입니다. Xcode GUI에서는 최초 1회 승인 대화상자를 통과하면 됩니다.
 
+`ENABLE_HARDENED_RUNTIME`이 꺼져 있는 것은 실수가 아닙니다. Hardened Runtime에 포함된 Library Validation이 ad-hoc 서명과 겹치면 시스템이 `Sparkle.framework` 로드를 막습니다. Developer ID 인증서가 생기기 전까지는 켜지 마세요.
+
+릴리스 빌드는 버전을 인자로 받습니다.
+
+```bash
+xcodebuild ... -configuration Release \
+           MARKETING_VERSION=0.2.0 CURRENT_PROJECT_VERSION=42 build
+```
+
 실행:
 
 ```bash
