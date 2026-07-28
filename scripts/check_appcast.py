@@ -40,8 +40,60 @@ def entries(root: ET.Element) -> dict[str, dict[str, str]]:
             "url": (enclosure.get("url") if enclosure is not None else "") or "",
             "signature": (enclosure.get(f"{{{SPARKLE}}}edSignature") if enclosure is not None else "") or "",
             "length": (enclosure.get("length") if enclosure is not None else "") or "",
+            "description": (item.findtext("description") or ""),
         }
     return found
+
+
+# 릴리스 노트에 남아서는 안 되는 원본 표기.
+#
+# v0.3.0 초안에서 실제로 리터럴 `**` 26개가 appcast 설명에 들어갔다.
+# changelog.py의 줄 안 변환이 `<li>`에서만 일어나고 굵게는 아예 다루지
+# 않았기 때문이다. 발행 전에 잡았으므로 되돌릴 수 있었지만, appcast는
+# append-only이므로 한 번 나가면 그 항목은 영구히 그 모양으로 남는다.
+#
+# 생성기를 고쳤어도 검사를 둔다. 다음 사람이 마크다운 표기를 하나 더 쓰면
+# 같은 일이 조용히 반복되고, 사용자가 업데이트 대화상자에서 별표를 읽는다.
+RAW_MARKDOWN = {
+    "**": "굵게 표기(`**`)가 변환되지 않았습니다",
+    "](": "링크 표기(`](`)가 변환되지 않았습니다",
+    "###": "헤딩 표기(`###`)가 변환되지 않았습니다",
+}
+
+
+# 이 검사를 만들기 전에 이미 나간 항목.
+#
+# 검사를 붙이자마자 빌드 27(v0.1.0)에서 리터럴 `**` 4곳이 나왔다. 즉 이
+# 결함은 첫 릴리스부터 있었고 아무도 알아채지 못했다. 소급 수정하지
+# 않는다 — 구버전 사용자가 이미 그 항목을 근거로 판단했고, appcast는
+# append-only다. 지우는 대신 여기 적어 둔다.
+#
+# **이 집합에 항목을 더하지 마십시오.** 새 릴리스가 여기 들어가야 한다면
+# 그것은 발행 전에 고칠 수 있었던 것을 놓쳤다는 뜻입니다.
+GRANDFATHERED = {"27"}
+
+
+def check_release_notes(local: dict[str, dict[str, str]]) -> int:
+    """설명에 원본 마크다운이 남아 있지 않은지."""
+    status = 0
+    for build, item in sorted(local.items(), key=lambda kv: int(kv[0])):
+        if build in GRANDFATHERED:
+            continue
+        for token, message in RAW_MARKDOWN.items():
+            count = item["description"].count(token)
+            if count:
+                print(
+                    f"빌드 {build}(v{item['version']})의 릴리스 노트에 "
+                    f"{message} — {count}곳.",
+                    file=sys.stderr,
+                )
+                print(
+                    "  사용자는 업데이트 대화상자에서 이 표기를 그대로 읽습니다. "
+                    "appcast는 append-only이므로 발행 전에 고쳐야 합니다.",
+                    file=sys.stderr,
+                )
+                status = 1
+    return status
 
 
 def main() -> int:
@@ -111,6 +163,8 @@ def main() -> int:
                 file=sys.stderr,
             )
             status = 1
+
+    status = max(status, check_release_notes(local))
 
     if status == 0:
         versions = ", ".join(

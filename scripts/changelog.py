@@ -28,6 +28,29 @@ def extract(text: str, version: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def inline(text: str) -> str:
+    """줄 안의 표기를 옮긴다. **이스케이프된 문자열에 적용한다.**
+
+    예전에는 이 변환이 `<li>` 안에서만 일어났고 굵게는 아예 다루지 않았다.
+    그래서 v0.3.0 초안의 appcast 설명에 리터럴 `**`가 26개 남았다 —
+    사용자가 업데이트 대화상자에서 별표를 그대로 읽게 되는 상태였다.
+    발행 전에 잡았으므로 되돌릴 수 있었지만, appcast는 append-only이므로
+    한 번 나가면 그 항목은 영구히 그 모양으로 남는다.
+
+    링크는 글자만 남기고 주소를 버린다. CHANGELOG의 링크는
+    `docs/adr/...` 같은 상대 경로이고, Sparkle의 릴리스 노트는 appcast
+    주소를 기준으로 해석하므로 그 주소에는 문서가 없다. 눌리지 않는 링크를
+    보여주는 것보다 글자만 남기는 것이 정직하다.
+    """
+    # 링크를 먼저 없앤다. 링크 글자 안의 굵게·코드가 뒤 규칙에 잡히도록.
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    # `코드` → <code>. 굵게보다 먼저 — 코드 안의 별표를 굵게로 읽지 않는다.
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    # **굵게** → <strong>
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    return text
+
+
 def to_html(markdown: str) -> str:
     """의존성 없이 최소한만 변환한다. CHANGELOG는 헤딩과 불릿뿐이다."""
     out: list[str] = []
@@ -40,21 +63,17 @@ def to_html(markdown: str) -> str:
             if in_list:
                 out.append("</ul>")
                 in_list = False
-            out.append(f"<h3>{html.escape(line[4:])}</h3>")
+            out.append(f"<h3>{inline(html.escape(line[4:]))}</h3>")
         elif line.lstrip().startswith(("- ", "* ")):
             if not in_list:
                 out.append("<ul>")
                 in_list = True
-            item = line.lstrip()[2:]
-            item = html.escape(item)
-            # `코드` → <code>
-            item = re.sub(r"`([^`]+)`", r"<code>\1</code>", item)
-            out.append(f"<li>{item}</li>")
+            out.append(f"<li>{inline(html.escape(line.lstrip()[2:]))}</li>")
         else:
             if in_list:
                 out.append("</ul>")
                 in_list = False
-            out.append(f"<p>{html.escape(line)}</p>")
+            out.append(f"<p>{inline(html.escape(line))}</p>")
     if in_list:
         out.append("</ul>")
     return "\n".join(out)
