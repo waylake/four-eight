@@ -69,6 +69,17 @@ jobs:
                      CODE_SIGNING_ALLOWED=NO \
                      build
 
+  policy:
+    name: Generation policy
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      # 자동 생성이 되살아나는 것을 막는다. 타입으로 못 막는 규칙은
+      # 검사로 남긴다 — 주석으로만 적으면 지워진다.
+      - name: Generation entry points are user actions only
+        run: bash scripts/check_generation_policy.sh
+
   generated:
     name: Generated sources are current
     runs-on: macos-26
