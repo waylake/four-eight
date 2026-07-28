@@ -18,8 +18,27 @@ struct ChatRequestTests {
         let body = try json(sample)
         // 항목을 늘리는 것은 이 앱이 지원하는 제공자 목록을 조용히 줄이는
         // 일이다. 규격에 있다는 이유로 보내지 않는다.
-        #expect(Set(body.keys) == ["model", "messages", "stream", "temperature", "max_tokens"])
+        #expect(Set(body.keys) == ["model", "messages", "stream", "temperature"])
         #expect(body["stream"] as? Bool == true)
+    }
+
+    /// 출력 상한을 기본으로 보내지 않는 것이 설계다.
+    ///
+    /// 700을 기본값으로 두었을 때 추론 모델에서 본문이 0자로 끝났다. 앱이
+    /// 고를 수 있는 옳은 숫자가 없다 — 같은 모델도 라우트에 따라 출력 상한이
+    /// 32배로 갈린다. 성숙한 도구 12개 중 7개가 아무 값도 보내지 않는다.
+    @Test("출력 상한을 기본으로 보내지 않는다")
+    func noBudgetByDefault() throws {
+        let body = try json(sample)
+        #expect(body["max_tokens"] == nil)
+        #expect(body["max_completion_tokens"] == nil)
+    }
+
+    @Test("사용자가 상한을 정하면 그때만 실린다")
+    func budgetOnlyWhenAsked() throws {
+        var request = sample
+        request.maxTokens = 25_000
+        #expect(try json(request)["max_tokens"] as? Int == 25_000)
     }
 
     @Test("쓸 데 없는 항목을 보내지 않는다", arguments: [
@@ -54,6 +73,7 @@ struct ChatRequestTests {
     @Test("max_completion_tokens로 바꿀 수 있다")
     func maxCompletionTokens() throws {
         var request = sample
+        request.maxTokens = 700
         request.compatibility.usesMaxCompletionTokens = true
         let body = try json(request)
         #expect(body["max_tokens"] == nil)

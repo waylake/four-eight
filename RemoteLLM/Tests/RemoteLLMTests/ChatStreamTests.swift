@@ -31,19 +31,30 @@ struct ChatStreamTests {
     /// 사고 과정을 본문에 섞으면 사용자는 사주 해설 자리에서 모델의
     /// 혼잣말을 읽는다. 무해한 버그가 아니다 — 이 앱은 모든 문장에 근거가
     /// 붙어 있다고 말하는데, 사고 과정에는 근거가 없다.
+    ///
+    /// 이 검사는 처음에 "조각이 하나도 안 나온다"로 적혀 있었다. 그것은
+    /// 규칙이 아니라 그때의 구현이었고, 진단을 위해 분량을 세기 시작하자
+    /// 정당한 변경을 막았다. 지켜야 하는 것은 **본문으로 나가지 않는
+    /// 것**이므로 그렇게 적는다.
     @Test("사고 과정은 본문이 아니다", arguments: [
         #"{"choices":[{"delta":{"reasoning_content":"사용자가 이직을 묻는다"}}]}"#,
         #"{"choices":[{"delta":{"reasoning":"먼저 재성을 본다"}}]}"#,
         #"{"choices":[{"delta":{"thinking":"음"}}]}"#,
     ])
     func reasoningDropped(_ wire: String) {
-        #expect(pieces(wire).isEmpty)
+        let text = pieces(wire).compactMap {
+            if case .text(let t) = $0 { return t } else { return nil }
+        }
+        #expect(text.isEmpty, "사고 과정이 본문으로 나갔습니다: \(text)")
     }
 
-    @Test("사고 과정과 본문이 같은 청크에 오면 본문만 남는다")
+    @Test("사고 과정과 본문이 같은 청크에 오면 본문만 본문이다")
     func reasoningAlongsideContent() {
         let wire = #"{"choices":[{"delta":{"reasoning":"음","content":"관성이"}}]}"#
-        #expect(pieces(wire) == [.text("관성이")])
+        let text = pieces(wire).compactMap {
+            if case .text(let t) = $0 { return t } else { return nil }
+        }
+        #expect(text == ["관성이"])
     }
 
     /// 토큰 한도에서 잘린 답은 완성된 답처럼 읽힌다. 이 앱은 근거를
@@ -169,5 +180,47 @@ struct FinishReasonTests {
         guard case .failure(.midStreamFinish) = pieces.first else {
             Issue.record("200 안의 error 종료가 조용히 통과했습니다"); return
         }
+    }
+}
+
+@Suite("사고 과정 분량")
+struct ReasoningLengthTests {
+    private func pieces(_ json: String) -> [ChatStreamDecoder.Piece] {
+        ChatStreamDecoder().decode(.init(data: json, name: nil))
+    }
+
+    /// 글자는 버리고 분량만 센다.
+    ///
+    /// `usage.completion_tokens_details.reasoning_tokens`를 쓰면 될 것 같지만
+    /// 로컬 런타임(Ollama·llama.cpp·vLLM)은 그 필드를 내보내지 않는다.
+    /// 추론 델타는 온다. 이미 파싱해서 버리고 있으므로 세는 것은 공짜다.
+    @Test("이름이 무엇이든 분량을 센다", arguments: [
+        (#"{"choices":[{"delta":{"reasoning_content":"먼저 재성을 본다"}}]}"#, 9),
+        (#"{"choices":[{"delta":{"reasoning":"음 그렇다면"}}]}"#, 6),
+        (#"{"choices":[{"delta":{"thinking":"12345"}}]}"#, 5),
+    ])
+    func countsWhateverTheName(_ wire: String, _ expected: Int) {
+        #expect(pieces(wire) == [.reasoning(chars: expected)])
+    }
+
+    @Test("배열로 오는 reasoning_details도 센다")
+    func countsDetailArray() {
+        let wire = #"{"choices":[{"delta":{"reasoning_details":[{"text":"abc"},{"text":"de"}]}}]}"#
+        #expect(pieces(wire) == [.reasoning(chars: 5)])
+    }
+
+    /// 분량을 세더라도 **본문으로는 절대 나가지 않는다.**
+    @Test("사고 과정이 본문 조각이 되지 않는다")
+    func neverBecomesText() {
+        let wire = #"{"choices":[{"delta":{"reasoning_content":"혼잣말","content":"관성이"}}]}"#
+        let result = pieces(wire)
+        let text = result.compactMap { if case .text(let t) = $0 { return t } else { return nil } }
+        #expect(text == ["관성이"])
+        #expect(result.contains(.reasoning(chars: 3)))
+    }
+
+    @Test("사고 과정이 없으면 조각도 없다")
+    func noneWhenAbsent() {
+        #expect(pieces(#"{"choices":[{"delta":{"content":"x"}}]}"#) == [.text("x")])
     }
 }

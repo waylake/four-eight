@@ -17,6 +17,37 @@ public struct ChatRequest: Sendable, Equatable {
     /// 확정된 사실과 근거, 그리고 사용자가 적은 사정.
     public var user: String
     public var temperature: Double?
+    /// 출력 토큰 상한. **기본은 nil이고, 그것이 이 타입의 결정이다.**
+    ///
+    /// 처음에는 700을 기본값으로 두었다. 온디바이스 Gemma 경로에서 그대로
+    /// 물려받은 값인데, 추론 모델에서는 이 한도가 **생각 + 답변**을 합쳐
+    /// 세기 때문에 700이 전부 생각에 쓰이고 본문이 0자로 끝났다.
+    /// 실측(`deepseek-v4-flash`):
+    ///
+    /// ```
+    /// max_tokens=700   finish_reason=length  본문 0자    추론 700/700
+    /// max_tokens=1500  finish_reason=stop    본문 316자  추론 1204/1409
+    /// ```
+    ///
+    /// 그래서 더 큰 숫자를 고르는 대신 **보내지 않기로 했다.** 근거 셋이다.
+    ///
+    /// 1. OpenAI가 직접 적는다 — 추론 토큰이 한도에 닿으면 "This might
+    ///    occur **before any visible output tokens are produced**, meaning
+    ///    you could incur costs for input and reasoning tokens without
+    ///    receiving a visible response." 권고는 **최소 25,000 토큰 예약**이다.
+    ///    이 앱이 쓰던 700의 35배다.
+    /// 2. 성숙한 도구 12개 중 7개가 아무 값도 보내지 않는다(Vercel AI SDK,
+    ///    LiteLLM, aider, LangChain, LlamaIndex, opencode 네이티브 경로,
+    ///    Zed의 OpenRouter 제공자). 서버 기본값에 맡기는 것이 다수다.
+    /// 3. opencode는 추론 모델에 대해 예산을 **지운다** —
+    ///    `output.maxOutputTokens = undefined`. 늘리는 것이 아니다.
+    ///
+    /// 그리고 상한은 애초에 모델의 속성이 아니다. 같은 모델이 업스트림
+    /// 라우트에 따라 32,768부터 1,048,576까지 32배로 갈린다. 앱이 고를
+    /// 수 있는 옳은 숫자가 없다.
+    ///
+    /// 사용자가 요금을 묶고 싶으면 설정에서 값을 준다. 그때만 실린다.
+    /// 근거: docs/research/reasoning-model-budgets.md.
     public var maxTokens: Int?
     public var compatibility: Compatibility
 
@@ -25,7 +56,7 @@ public struct ChatRequest: Sendable, Equatable {
         system: String,
         user: String,
         temperature: Double? = 0.6,
-        maxTokens: Int? = 700,
+        maxTokens: Int? = nil,
         compatibility: Compatibility = .init()
     ) {
         self.model = model
@@ -47,7 +78,19 @@ public struct ChatRequest: Sendable, Equatable {
     /// 원문을 보여주고 해당 스위치를 짚어 준다.
     public struct Compatibility: Sendable, Equatable, Codable, Hashable {
         /// `max_tokens` 대신 `max_completion_tokens`를 쓴다.
+        ///
         /// OpenAI가 새 모델에서 `max_tokens`를 거절하며 갈린 지점이다.
+        /// **기본으로 켜지 않는다.** 이 이름은 세 갈래로 갈린다.
+        ///
+        /// - OpenAI: 추론 토큰을 **포함**한 상한.
+        /// - xAI: "only applies to visible output tokens (i.e. does not
+        ///   apply to tokens used for reasoning)" — **정반대 의미다.**
+        /// - Ollama: 구조체에 필드가 아예 없어 **조용히 무시된다.**
+        ///   실측 — 32을 요청하고 912 토큰을 생성했다.
+        ///
+        /// 마지막이 특히 위험하다. 상한을 걸었다고 믿는데 걸리지 않는다.
+        /// 그래서 상한을 보낼 때의 기본 이름은 `max_tokens`이고, 이 스위치는
+        /// 제공자가 그것을 거절할 때만 켠다.
         public var usesMaxCompletionTokens = false
         /// `temperature`를 아예 보내지 않는다. 고정 온도만 받는 모델이 있다.
         public var omitsTemperature = false

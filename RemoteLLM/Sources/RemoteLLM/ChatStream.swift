@@ -22,6 +22,17 @@ public struct ChatStreamDecoder: Sendable {
     public enum Piece: Equatable, Sendable {
         /// 사용자에게 보여줄 본문 조각.
         case text(String)
+        /// 모델이 생각한 **분량만**. 내용은 담지 않는다.
+        ///
+        /// 사고 과정은 이 앱의 산출물이 아니므로 글자를 나르지 않는다.
+        /// 그런데 분량은 알아야 한다 — "추론이 예산을 다 써서 본문이 0자"인
+        /// 상황을 진단하는 유일한 신호이기 때문이다.
+        ///
+        /// `usage.completion_tokens_details.reasoning_tokens`를 쓰면 될 것
+        /// 같지만 **로컬 런타임은 그 필드를 내보내지 않는다** — Ollama,
+        /// llama.cpp, vLLM 모두 없다(실측). 반면 추론 델타 자체는 온다.
+        /// 이미 파싱해서 버리고 있으므로 세는 것은 공짜다.
+        case reasoning(chars: Int)
         /// 모델이 스스로 끝냈다. 정상 종료.
         case finished(reason: String?)
         /// 토큰 한도에서 잘렸다. 정상 종료가 아니다.
@@ -57,10 +68,13 @@ public struct ChatStreamDecoder: Sendable {
         if let choices = root["choices"] as? [[String: Any]] {
             for choice in choices {
                 if let delta = choice["delta"] as? [String: Any] {
-                    // `content`만 읽는다. `reasoning`·`reasoning_content`는
-                    // 일부러 무시한다 — 사고 과정은 이 앱의 산출물이 아니다.
+                    // `content`만 본문이다. 사고 과정은 글자를 나르지 않고
+                    // 분량만 센다.
                     if let text = delta["content"] as? String, !text.isEmpty {
                         pieces.append(.text(text))
+                    }
+                    if let thought = Self.reasoningLength(in: delta), thought > 0 {
+                        pieces.append(.reasoning(chars: thought))
                     }
                 }
                 // 비스트리밍 응답을 스트리밍처럼 되돌려주는 제공자가 있다.
@@ -84,6 +98,34 @@ public struct ChatStreamDecoder: Sendable {
         }
 
         return pieces
+    }
+
+    /// 이 델타에 실린 사고 과정의 길이.
+    ///
+    /// 이름이 최소 넷이다 — `reasoning_content`(DeepSeek 계열, 조사한
+    /// 카탈로그에서 627건), `reasoning`(Ollama·OpenRouter),
+    /// `reasoning_details`(14건), `thinking`. 하나만 보면 다른 제공자에서
+    /// 진단 신호를 잃는다.
+    static func reasoningLength(in delta: [String: Any]) -> Int? {
+        var total = 0
+        for key in ["reasoning_content", "reasoning", "reasoning_details", "thinking"] {
+            switch delta[key] {
+            case let text as String:
+                total += text.count
+            case let parts as [Any]:
+                // `reasoning_details`는 배열로 온다. 내용은 쓰지 않으므로
+                // 모양을 다 알 필요 없이 길이만 센다.
+                for part in parts {
+                    if let text = part as? String { total += text.count }
+                    else if let object = part as? [String: Any],
+                            let text = object["text"] as? String { total += text.count }
+                    else { total += 1 }
+                }
+            default:
+                continue
+            }
+        }
+        return total
     }
 
     /// `finish_reason`을 어떻게 읽을지.

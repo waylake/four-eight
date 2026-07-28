@@ -27,6 +27,17 @@ final class RemoteProviderStore {
         var base: URL
         var model: String
         var compatibility: ChatRequest.Compatibility
+        /// 사용자가 정한 출력 토큰 상한. **nil이 기본이고 권장값이다.**
+        ///
+        /// 비워 두면 요청에 항목 자체가 실리지 않고 제공자의 기본값이 쓰인다.
+        /// 앱이 고를 수 있는 옳은 숫자가 없기 때문이다 — 같은 모델이
+        /// 업스트림 라우트에 따라 출력 상한이 32배로 갈린다.
+        ///
+        /// 요금을 묶고 싶은 사용자를 위해 남겨 둔다. 추론 모델에서 낮게
+        /// 잡으면 생각만 하다 끝나므로 화면에서 그 사실을 알린다.
+        ///
+        /// 옵셔널이라 이 항목이 없는 예전 설정도 그대로 디코드된다.
+        var maxTokens: Int?
 
         var endpoint: Endpoint { Endpoint(base: base) }
         var destination: Destination { endpoint.destination }
@@ -121,9 +132,16 @@ final class RemoteProviderStore {
     ///
     /// 호스트가 바뀌면 동의를 지운다. 새 목적지에 대해 예전 동의를
     /// 물려주면, 사용자는 A에 보내겠다고 했는데 B로 나간다.
-    func configure(base: URL, model: String, compatibility: ChatRequest.Compatibility) {
+    func configure(
+        base: URL,
+        model: String,
+        compatibility: ChatRequest.Compatibility,
+        maxTokens: Int? = nil
+    ) {
         let previousHost = config?.destination.host
-        config = Config(base: base, model: model, compatibility: compatibility)
+        config = Config(
+            base: base, model: model, compatibility: compatibility, maxTokens: maxTokens
+        )
         persistConfig()
 
         let newHost = config?.destination.host
@@ -225,6 +243,7 @@ final class RemoteProviderStore {
         return RemoteWriter(
             client: client,
             model: config.model,
+            maxTokens: config.maxTokens,
             compatibility: config.compatibility,
             onUsage: { [weak self] prompt, completion in
                 Task { @MainActor [weak self] in

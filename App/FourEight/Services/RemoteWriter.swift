@@ -16,6 +16,8 @@ import SajuKit
 struct RemoteWriter: Sendable {
     let client: ChatClient
     let model: String
+    /// 사용자가 정한 출력 상한. nil이면 요청에 실리지 않는다.
+    var maxTokens: Int?
     var compatibility: ChatRequest.Compatibility
     /// 제공자가 사용량을 보고했을 때. 보고하지 않는 제공자도 있다.
     let onUsage: @Sendable (Int?, Int?) -> Void
@@ -23,11 +25,13 @@ struct RemoteWriter: Sendable {
     init(
         client: ChatClient,
         model: String,
+        maxTokens: Int? = nil,
         compatibility: ChatRequest.Compatibility = .init(),
         onUsage: @escaping @Sendable (Int?, Int?) -> Void = { _, _ in }
     ) {
         self.client = client
         self.model = model
+        self.maxTokens = maxTokens
         self.compatibility = compatibility
         self.onUsage = onUsage
     }
@@ -44,19 +48,31 @@ struct RemoteWriter: Sendable {
         onText: @escaping @Sendable (String) -> Void
     ) async throws {
         let request = ChatRequest(
-            model: model, system: system, user: user, compatibility: compatibility
+            model: model, system: system, user: user,
+            maxTokens: maxTokens, compatibility: compatibility
         )
         var sawText = false
+        var thoughtChars = 0
         for try await piece in client.stream(request) {
             try Task.checkCancellation()
             switch piece {
             case .text(let delta):
                 sawText = true
                 onText(delta)
+            case .reasoning(let chars):
+                // 글자는 버리고 분량만 센다. 이 수치가 아래 진단의 근거다.
+                thoughtChars += chars
             case .usage(let prompt, let completion):
                 onUsage(prompt, completion)
             case .truncated:
-                throw RemoteWriterError.truncated
+                // **잘림의 원인을 구분한다.**
+                //
+                // 본문이 한 글자도 없고 생각만 길었다면 추론이 예산을 다 쓴
+                // 것이다. "답이 잘렸습니다"라고만 말하면 사용자는 무엇을
+                // 해야 할지 모른다 — 실제로 이 앱이 그 상태였다.
+                throw sawText
+                    ? RemoteWriterError.truncated
+                    : RemoteWriterError.reasoningExhaustedBudget(thoughtChars: thoughtChars)
             case .finished:
                 break
             case .failure(let error):
@@ -72,7 +88,11 @@ struct RemoteWriter: Sendable {
         // 사용자의 중단이 "제공자가 빈 답을 보냈습니다"로 표시된다.
         try Task.checkCancellation()
         // 200에 빈 스트림. 조용히 성공으로 두면 빈 말풍선이 남는다.
-        guard sawText else { throw RemoteWriterError.emptyResponse }
+        guard sawText else {
+            throw thoughtChars > 0
+                ? RemoteWriterError.reasoningExhaustedBudget(thoughtChars: thoughtChars)
+                : RemoteWriterError.emptyResponse
+        }
     }
 }
 
@@ -100,8 +120,21 @@ final class CollectedText: @unchecked Sendable {
 }
 
 enum RemoteWriterError: LocalizedError, Equatable {
-    /// 토큰 한도에서 잘렸다.
+    /// 토큰 한도에서 잘렸다. 본문은 일부 나왔다.
     case truncated
+    /// **추론이 예산을 다 써서 본문이 한 글자도 나오지 않았다.**
+    ///
+    /// 추론 모델에서 출력 상한은 생각과 답변을 합쳐 센다. 상한이 낮으면
+    /// 모델이 생각만 하다 끝나고, 사용자는 요금을 내고 아무것도 받지 못한다.
+    /// OpenAI가 직접 적는 증상이다 — "This might occur before any visible
+    /// output tokens are produced, meaning you could incur costs for input
+    /// and reasoning tokens without receiving a visible response."
+    ///
+    /// 자동으로 상한을 올려 다시 보내지 않는다. `finish_reason: "length"`가
+    /// 네 가지 원인을 뭉갠 값이어서 — 상한 초과, **컨텍스트 초과**, 크레딧
+    /// 상한 — 올리는 것이 해결인 경우와 악화인 경우가 섞여 있다. 무엇이
+    /// 일어났는지 말하고 사용자가 정하게 한다.
+    case reasoningExhaustedBudget(thoughtChars: Int)
     /// 제공자가 200을 주고 아무 글자도 보내지 않았다.
     case emptyResponse
 
@@ -109,6 +142,11 @@ enum RemoteWriterError: LocalizedError, Equatable {
         switch self {
         case .truncated:
             "답이 길이 한도에서 잘렸습니다. 받은 문장은 그대로 남아 있습니다. 이어서 만들면 이 섹션을 처음부터 다시 씁니다."
+        case .reasoningExhaustedBudget(let chars):
+            """
+            이 모델이 생각에만 \(String(chars))자를 쓰고 답변을 시작하지 못했습니다.             추론 모델은 출력 한도를 생각과 답변에 함께 쓰기 때문입니다.
+            설정 → 해석에서 출력 토큰 상한을 비우시면(권장) 제공자의 기본값을 쓰고,             값을 두시려면 넉넉하게 — OpenAI는 25,000 이상을 권합니다.
+            """
         case .emptyResponse:
             "제공자가 응답은 했지만 아무 문장도 보내지 않았습니다. 모델 이름이 맞는지 확인해 주세요."
         }

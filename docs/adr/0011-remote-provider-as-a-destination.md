@@ -156,10 +156,47 @@ Pew 조사에서 AI 요약이 있을 때 인용 링크 클릭은 전체 방문�
 
 ### 8. 요청은 일부러 작다
 
-`model`, `messages`, `stream`, `temperature`, `max_tokens`뿐이다. `tools`,
+`model`, `messages`, `stream`, `temperature`뿐이다. `tools`,
 `response_format`, `logprobs`, `seed` 같은 것은 쓸 데가 없으므로 보내지
 않는다. 보내지 않는 것은 호환 문제가 생길 수 없고, **항목을 늘리는 것은
 이 앱이 지원하는 제공자 목록을 조용히 줄이는 일이다.**
+
+**출력 토큰 상한을 기본으로 보내지 않는다.** 이것은 나중에 실패로 배운
+것이다. 온디바이스 경로의 700을 그대로 물려받았는데, 추론 모델에서 그
+한도는 생각과 답변을 합쳐 세기 때문에 700이 전부 생각에 쓰이고 **본문이 0자로
+끝났다.** 사용자에게는 "잘렸습니다"만 보였고 요금은 나갔다.
+
+더 큰 숫자를 고르지 않고 항목을 지운 이유는 셋이다.
+
+- OpenAI가 이 증상을 직접 적는다 — "This might occur **before any visible
+  output tokens are produced**, meaning you could incur costs for input and
+  reasoning tokens without receiving a visible response." 권고는 **최소
+  25,000 토큰 예약**이고, 이 앱이 쓰던 값의 35배다.
+- 성숙한 도구 12개 중 **7개가 아무 값도 보내지 않는다.** 서버 기본값에
+  맡기는 것이 다수다. opencode는 추론 모델에 대해 예산을 **지운다**
+  (`output.maxOutputTokens = undefined`) — 늘리는 것이 아니다.
+- **상한은 모델의 속성이 아니라 라우트의 속성이다.** 같은 모델 id가 업스트림에
+  따라 32,768부터 1,048,576까지 32배로 갈린다. 앱이 고를 수 있는 옳은 숫자가
+  존재하지 않는다.
+
+사용자가 요금을 묶고 싶으면 설정에서 값을 준다. 그때만 실린다. 이것도
+§9의 태도와 같다 — 짐작한 기본값을 정답이라 부르지 않는다.
+
+**`max_completion_tokens`로 자동 전환하지 않는다.** 이름이 세 갈래로 갈린다.
+OpenAI는 추론을 포함한 상한, xAI는 "only applies to visible output tokens"로
+**정반대**, Ollama는 필드가 없어 **조용히 무시한다**(실측: 32을 요청하고 912
+토큰 생성). 마지막이 가장 위험하다 — 상한을 걸었다고 믿는데 걸리지 않는다.
+
+**잘림의 원인을 구분해 말한다.** `finish_reason: "length"`는 네 원인을 뭉갠
+값이고(상한 초과, 컨텍스트 초과, 크레딧 상한), 올리는 것이 해결인 경우와
+악화인 경우가 섞여 있다. 그래서 **자동 재시도를 하지 않는다.** 대신 본문이
+0자이고 생각만 길었으면 그 사실을 그대로 말한다.
+
+그 판정에 `usage.completion_tokens_details.reasoning_tokens`를 쓰지 않는다.
+**로컬 런타임은 그 필드를 내보내지 않는다**(Ollama·llama.cpp·vLLM 전부).
+대신 이미 파싱해서 버리고 있는 추론 델타의 **분량만** 센다 — 글자는 나르지
+않으므로 사고 과정이 화면에 새지 않고, 진단은 카탈로그 없이 얻는다.
+근거는 [reasoning-model-budgets.md](../research/reasoning-model-budgets.md).
 
 제공자마다 갈리는 지점(`max_completion_tokens`, 온도 거부, system 역할
 미지원)은 스위치로 두되 접어 둔다. 만세력의 유파 차이와 달리 **어느 쪽이

@@ -108,6 +108,7 @@ private struct RemoteProviderSection: View {
     @State private var rawBase = ""
     @State private var model = ""
     @State private var key = ""
+    @State private var maxTokensText = ""
     @State private var saveError: String?
     @State private var showsCompatibility = false
 
@@ -158,6 +159,9 @@ private struct RemoteProviderSection: View {
                 guard let config = provider.config else { return }
                 if rawBase.isEmpty { rawBase = config.base.absoluteString }
                 if model.isEmpty { model = config.model }
+                if maxTokensText.isEmpty, let cap = config.maxTokens {
+                    maxTokensText = String(cap)
+                }
             }
     }
 
@@ -307,6 +311,22 @@ private struct RemoteProviderSection: View {
             Text("OpenAI 호환을 자칭하는 구현은 많지만 규격을 전부 따르는 곳은 드뭅니다. 기본값은 가장 좁은 요청이며, 제공자가 거절하면 위의 확인 결과에 어느 항목이 문제인지 표시됩니다. 그때 해당 스위치만 켜 주세요.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            LabeledContent("출력 토큰 상한") {
+                TextField("비움 = 제공자 기본값", text: $maxTokensText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 160)
+                    .font(.system(.body, design: .monospaced))
+            }
+            // 여기가 이 앱을 못 쓰게 만들었던 자리다. 사실을 그대로 적는다.
+            Text("비워 두시는 것을 권합니다. 앱이 고를 수 있는 옳은 숫자가 없습니다 — 같은 모델도 제공자 라우트에 따라 출력 상한이 32배까지 갈립니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("추론 모델(DeepSeek·o 계열·Gemini 등)에서는 이 상한을 **생각과 답변에 함께** 씁니다. 낮게 잡으면 모델이 생각만 하다 끝나고 답변이 한 글자도 나오지 않으면서 요금은 나갑니다. OpenAI는 25,000 이상을 권합니다.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         } header: {
             Text("호환 (대개 건드릴 필요가 없습니다)")
         }
@@ -402,10 +422,15 @@ private struct RemoteProviderSection: View {
     private func save() {
         guard let endpoint else { return }
         saveError = nil
+        // 숫자로 읽히지 않으면 상한 없음으로 둔다. 0이나 음수도 그렇게
+        // 다룬다 — Roo Code가 `max_completion_tokens: -1`을 와이어에 실어
+        // 보내는 버그가 실제로 있다.
+        let cap = Int(maxTokensText.trimmingCharacters(in: .whitespaces))
         provider.configure(
             base: endpoint.base,
             model: model.trimmingCharacters(in: .whitespacesAndNewlines),
-            compatibility: provider.config?.compatibility ?? .init()
+            compatibility: provider.config?.compatibility ?? .init(),
+            maxTokens: (cap ?? 0) > 0 ? cap : nil
         )
         let typed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty else { return }
@@ -427,6 +452,7 @@ private struct RemoteProviderSection: View {
             rawBase = ""
             model = ""
             key = ""
+            maxTokensText = ""
             saveError = nil
         } catch let failure as Secrets.Failure {
             saveError = failure.message
