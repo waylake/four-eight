@@ -5,6 +5,7 @@
 | [architecture.md](./architecture.md) | 전체 구조, 계산 경로와 해석 경로, 데이터가 놓이는 자리 |
 | [saju-engine.md](./saju-engine.md) | 만세력 계산 규칙 전체와 천문 알고리즘 |
 | [on-device-ai.md](./on-device-ai.md) | 모델 선정, 프롬프트 전략, 라이선스 |
+| [consultation.md](./consultation.md) | 상담 기능의 화면·기능 기획, 하지 않기로 한 것 |
 | [release.md](./release.md) | 릴리스 절차, 버전 규칙, 서명과 배포 채널 |
 | [adr/](./adr/) | 구조적 결정 기록 |
 | [research/](./research/) | 조사 노트와 출처 |

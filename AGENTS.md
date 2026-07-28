@@ -8,6 +8,10 @@ AI 코딩 에이전트가 이 저장소에서 작업할 때 알아야 할 것들
 
 **`SajuKit`에 의존성을 추가하지 마세요.** Foundation만 씁니다. 이 제약이 이 패키지의 가치입니다.
 
+**모델이 사용자를 대신해 시작하는 일을 만들지 마세요.** LLM 생성은 사용자가 버튼을 눌러야만 시작합니다. `onAppear`·`onChange`·`task`에서 생성을 부르면 안 되고, "캐시가 없으면 채우는" 함수를 다시 만들면 안 됩니다. 화면에는 규칙 엔진이 조립한 기준선 문장이 항상 먼저 있습니다. `scripts/check_generation_policy.sh`가 검사하고 CI가 실행합니다. 근거는 [ADR 0009](./docs/adr/0009-baseline-first-generation-on-demand.md)에 있습니다.
+
+**모델에게 안전 판단을 맡기지 마세요.** 위기 표현 감지와 대응 문구는 결정론적 코드가 처리하고 모델을 호출하지 않습니다. 계산을 맡기지 않는 것과 같은 이유입니다 — 그럴듯하게 틀리면 사람이 다칩니다. [ADR 0010](./docs/adr/0010-consultation-over-open-chat.md)을 보세요.
+
 **테스트 기댓값을 구현에 맞추지 마세요.** `PublishedCaseTests`와 `SolarTermReferenceTests`의 값은 외부 공표 자료에서 온 것입니다. 테스트가 깨지면 구현이 틀린 것입니다. 기댓값이 틀렸다고 판단되면 `docs/research/`에 새 출처를 추가하고 그 근거로 바꾸세요.
 
 **유파가 갈리는 지점에 정답을 정하지 마세요.** `SajuOptions`에 옵션으로 추가합니다. [ADR 0005](./docs/adr/0005-expose-school-differences-as-settings.md)를 보세요.

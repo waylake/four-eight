@@ -41,3 +41,5 @@
 | [0006](./0006-generation-state-belongs-to-the-document.md) | 생성 상태는 뷰가 아니라 문서에 둔다 | accepted |
 | [0007](./0007-describe-days-do-not-rank-them.md) | 날을 서술하되 등급을 매기지 않는다 | accepted |
 | [0008](./0008-ship-arm64-only.md) | arm64 전용으로 배포한다 | accepted |
+| [0009](./0009-baseline-first-generation-on-demand.md) | 기준선을 항상 두고, 생성은 주문으로만 한다 | accepted |
+| [0010](./0010-consultation-over-open-chat.md) | 열린 채팅 대신 상담 단위로 다룬다 | accepted |

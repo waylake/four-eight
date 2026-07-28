@@ -45,3 +45,4 @@
 | [manseryeok-validation.md](./manseryeok-validation.md) | 절기 시각·표준시 연혁·공개 사주 사례 7건의 골든 데이터. 값은 `SajuKit`의 `SolarTermReferenceTests.swift`와 `PublishedCaseTests.swift`에 테스트로 고정되어 있다 |
 | [on-device-llm.md](./on-device-llm.md) | Gemma 4와 mlx-swift-lm 3.31.4의 검증된 스펙, 모델 ID와 크기, Apache 2.0 라이선스 확인, chat template |
 | [interpretation-content.md](./interpretation-content.md) | `rules.json` 해석 룰 60개의 집필 원칙, 스키마와 태그 규약, 태그 매칭을 벡터 검색으로 만들지 않은 이유 |
+| [consultation-safety.md](./consultation-safety.md) | 정신건강 성격 AI 챗봇의 규제 조문(Utah·Nevada·Illinois·California·EU AI Act·Apple), 위기 대응 관행, 4B 모델의 멀티턴 한계 측정치, MLX Swift 컨텍스트 관리의 알려진 결함 |
