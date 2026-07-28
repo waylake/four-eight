@@ -2,6 +2,8 @@
 
 이 프로젝트는 [Keep a Changelog](https://keepachangelog.com/)를 따르고 [Semantic Versioning](https://semver.org/)을 씁니다.
 
+릴리스 노트의 정본은 이 파일입니다. GitHub 릴리스 본문과 앱 안에서 보이는 업데이트 설명이 모두 여기서 파생됩니다. 태그를 밀기 전에 해당 버전 섹션을 `## [0.1.0] - 2026-07-28` 형태로 만들어 두세요.
+
 ## [Unreleased]
 
 ### Added

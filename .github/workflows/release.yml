@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "다시 만들 태그 (예: v0.1.0)"
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 빌드와 초안 릴리스
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 빌드 번호를 커밋 수로 계산하므로 전체 히스토리가 필요하다.
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: 버전 계산
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          BUILD=$(git rev-list --count HEAD)
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD"     >> "$GITHUB_OUTPUT"
+          echo "버전 $VERSION · 빌드 $BUILD"
+
+      - name: 릴리스 노트 추출
+        id: notes
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          python3 scripts/changelog.py --version "$V" --format markdown > release-notes.md
+          python3 scripts/changelog.py --version "$V" --format html     > release-notes.html
+          echo "--- 릴리스 노트 ---"
+          cat release-notes.md
+
+      - name: 엔진 테스트
+        working-directory: SajuKit
+        run: swift test
+
+      - name: XcodeGen 설치
+        run: brew install xcodegen
+
+      - name: 프로젝트 생성
+        run: xcodegen generate
+
+      - name: 릴리스 빌드
+        run: |
+          xcodebuild -project FourEight.xcodeproj \
+                     -scheme FourEight \
+                     -configuration Release \
+                     -derivedDataPath build \
+                     -skipMacroValidation \
+                     -skipPackagePluginValidation \
+                     MARKETING_VERSION=${{ steps.version.outputs.version }} \
+                     CURRENT_PROJECT_VERSION=${{ steps.version.outputs.build }} \
+                     build
+
+      - name: 번들 검증
+        run: |
+          APP=build/Build/Products/Release/FourEight.app
+          test -d "$APP" || { echo "앱이 없습니다"; exit 1; }
+
+          # 버전이 실제로 주입되었는지 확인한다. 조용히 0.1.0이 나가면
+          # Sparkle이 업데이트를 인식하지 못한다.
+          GOT_V=$(defaults read "$PWD/$APP/Contents/Info.plist" CFBundleShortVersionString)
+          GOT_B=$(defaults read "$PWD/$APP/Contents/Info.plist" CFBundleVersion)
+          [ "$GOT_V" = "${{ steps.version.outputs.version }}" ] || { echo "버전 불일치: $GOT_V"; exit 1; }
+          [ "$GOT_B" = "${{ steps.version.outputs.build }}" ]   || { echo "빌드 불일치: $GOT_B"; exit 1; }
+
+          # Sparkle이 들어 있고 서명이 유효한지. XPC까지 확인한다.
+          codesign --verify --deep --strict "$APP"
+          test -d "$APP/Contents/Frameworks/Sparkle.framework" || { echo "Sparkle 없음"; exit 1; }
+
+          # 업데이트 피드와 공개키가 박혔는지. 빠진 채 배포되면 되돌릴 수 없다.
+          defaults read "$PWD/$APP/Contents/Info.plist" SUFeedURL     > /dev/null
+          defaults read "$PWD/$APP/Contents/Info.plist" SUPublicEDKey > /dev/null
+          echo "번들 검증 통과: $GOT_V ($GOT_B)"
+
+      - name: ZIP 패키징
+        id: package
+        run: |
+          cd build/Build/Products/Release
+          ditto -c -k --sequesterRsrc --keepParent FourEight.app FourEight.zip
+          echo "length=$(stat -f%z FourEight.zip)" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 FourEight.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Sparkle 도구 준비
+        run: |
+          curl -sL -o sparkle.tar.xz \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.4/Sparkle-2.9.4.tar.xz
+          tar -xf sparkle.tar.xz bin/sign_update
+
+      - name: 업데이트 서명
+        id: sign
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "::error::SPARKLE_PRIVATE_KEY 시크릿이 없습니다. 서명 없는 업데이트는 Sparkle이 거부합니다."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > key.txt
+          OUT=$(./bin/sign_update build/Build/Products/Release/FourEight.zip --ed-key-file key.txt)
+          rm -f key.txt
+          SIG=$(echo "$OUT" | sed -n 's/.*edSignature="\([^"]*\)".*/\1/p')
+          [ -n "$SIG" ] || { echo "서명 추출 실패: $OUT"; exit 1; }
+          echo "signature=$SIG" >> "$GITHUB_OUTPUT"
+
+      - name: appcast 갱신 (스테이징)
+        run: |
+          # 살아 있는 appcast를 받아 항목을 더한다. appcast는 append-only다.
+          # 한 번 나간 항목은 지우지 않는다.
+          mkdir -p out
+          curl -sfL https://waylake.github.io/four-eight/appcast.xml -o out/appcast.xml || true
+
+          python3 scripts/appcast.py \
+            --appcast out/appcast.xml \
+            --version ${{ steps.version.outputs.version }} \
+            --build ${{ steps.version.outputs.build }} \
+            --url "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/FourEight.zip" \
+            --length ${{ steps.package.outputs.length }} \
+            --signature '${{ steps.sign.outputs.signature }}' \
+            --notes-file release-notes.html
+
+      - name: 스테이징 산출물 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: appcast-staged
+          path: out/appcast.xml
+          retention-days: 30
+
+      - name: 초안 릴리스 생성
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 초안으로 만든다. 릴리스를 발행하는 행위가 appcast를 살리는
+          # 신호가 된다. 잘못 만든 빌드가 곧바로 전 사용자에게 업데이트
+          # 알림으로 나가는 사고를 막는다.
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --draft \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file release-notes.md \
+            build/Build/Products/Release/FourEight.zip
+
+          echo "### 초안 릴리스 생성됨" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 버전: ${{ steps.version.outputs.version }} (빌드 ${{ steps.version.outputs.build }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA256: \`${{ steps.package.outputs.sha256 }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "내려받아 직접 실행해 본 뒤 릴리스를 **발행**하세요. 발행하면 appcast가 갱신되어 기존 사용자에게 업데이트가 알려집니다." >> "$GITHUB_STEP_SUMMARY"

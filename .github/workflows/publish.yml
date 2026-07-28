@@ -1,0 +1,114 @@
+name: Publish
+
+# 릴리스를 발행하는 행위가 appcast를 살리는 신호다.
+#
+# 태그를 밀면 빌드와 초안 릴리스까지만 간다. 사람이 내려받아 실제로
+# 실행해 보고 발행 버튼을 눌러야 업데이트가 전 사용자에게 알려진다.
+# 1인 프로젝트에는 이 관문이 더 필요하다. 잘못 나간 항목을 되돌릴
+# 방법이 없기 때문이다 — appcast는 append-only다.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "appcast를 살릴 태그 (예: v0.1.0)"
+        required: true
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  promote:
+    name: appcast 발행
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 대상 태그 확인
+        id: target
+        run: |
+          TAG="${{ github.event.inputs.tag || github.event.release.tag_name }}"
+          [ -n "$TAG" ] || { echo "태그를 결정할 수 없습니다"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: 스테이징 appcast 가져오기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 이 태그를 만든 Release 워크플로 실행에서 산출물을 찾는다.
+          RUN=$(gh run list --workflow Release --json databaseId,headBranch,conclusion \
+                  --limit 40 \
+                  --jq "[.[] | select(.headBranch==\"${{ steps.target.outputs.tag }}\" and .conclusion==\"success\")][0].databaseId")
+          [ -n "$RUN" ] && [ "$RUN" != "null" ] || {
+            echo "::error::${{ steps.target.outputs.tag }}에 해당하는 성공한 Release 실행을 찾지 못했습니다."
+            exit 1
+          }
+          gh run download "$RUN" --name appcast-staged --dir staged
+          test -s staged/appcast.xml || { echo "::error::스테이징 appcast가 비었습니다"; exit 1; }
+
+      - name: 발행 전 검증
+        run: |
+          # 이 태그의 항목이 실제로 들어 있는지, 그리고 그 항목이 가리키는
+          # 자산이 릴리스에 존재하는지 확인한다.
+          VERSION="${{ steps.target.outputs.tag }}"
+          VERSION="${VERSION#v}"
+          grep -q "<sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>" staged/appcast.xml || {
+            echo "::error::appcast에 ${VERSION} 항목이 없습니다"; exit 1; }
+
+          URL=$(grep -o 'url="[^"]*'"${{ steps.target.outputs.tag }}"'/FourEight.zip"' staged/appcast.xml | head -1 | sed 's/url="//;s/"$//')
+          [ -n "$URL" ] || { echo "::error::enclosure URL을 찾지 못했습니다"; exit 1; }
+          CODE=$(curl -sL -o /dev/null -w '%{http_code}' "$URL")
+          [ "$CODE" = "200" ] || { echo "::error::자산에 접근할 수 없습니다 ($CODE): $URL"; exit 1; }
+          echo "검증 통과: $URL"
+
+      - name: Pages 자료 구성
+        run: |
+          mkdir -p site
+          cp staged/appcast.xml site/appcast.xml
+          # 피드 주소를 브라우저로 열었을 때 빈 화면 대신 안내가 보이게 한다.
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="ko">
+          <meta charset="utf-8">
+          <title>FourEight 업데이트 피드</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            body { font: 16px/1.7 -apple-system, system-ui, sans-serif; max-width: 34rem;
+                   margin: 12vh auto; padding: 0 1.5rem; color: #2a251f; background: #faf7f0; }
+            code { background: #ece5d8; padding: .15em .4em; border-radius: 4px; font-size: .9em; }
+            a { color: #b43a2e; }
+            @media (prefers-color-scheme: dark) {
+              body { color: #e8e1d6; background: #262320; }
+              code { background: #3a352f; }
+            }
+          </style>
+          <h1>FourEight 업데이트 피드</h1>
+          <p>이 주소는 FourEight 앱이 업데이트를 확인할 때 쓰는 피드입니다.
+             사람이 읽을 내용은 없습니다.</p>
+          <p>앱과 릴리스는 <a href="https://github.com/waylake/four-eight">github.com/waylake/four-eight</a>에 있습니다.</p>
+          <p>피드: <a href="./appcast.xml"><code>appcast.xml</code></a></p>
+          HTML
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: 요약
+        run: |
+          echo "### appcast 발행됨" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 태그: ${{ steps.target.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 피드: https://waylake.github.io/four-eight/appcast.xml" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "기존 사용자에게 업데이트가 알려지기 시작합니다. Homebrew cask는 별도로 갱신하세요." >> "$GITHUB_STEP_SUMMARY"

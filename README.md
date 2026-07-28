@@ -83,7 +83,41 @@ The app is fully functional without any model: the rule engine composes the inte
 
 ## Install
 
-Build from source:
+### Homebrew (recommended)
+
+```bash
+brew install --cask waylake/tap/four-eight
+```
+
+Nothing else to do. This path never shows the warning below.
+
+### Direct download
+
+Grab `FourEight.zip` from the [latest release](https://github.com/waylake/four-eight/releases/latest), unzip it, and move `FourEight.app` to `/Applications`.
+
+> [!IMPORTANT]
+> This app is not notarized by Apple. The Apple Developer Program costs $99/year and has no open-source exemption.
+>
+> So the first launch shows **"is damaged and can't be opened."** The file is not actually damaged — that is what macOS says about apps it can't verify.
+
+**Fix it in Terminal (one line, reliable)**
+
+```bash
+xattr -dr com.apple.quarantine /Applications/FourEight.app
+```
+
+**Fix it in System Settings (no Terminal)**
+
+Control-clicking to open no longer works as of macOS 15. The order matters:
+
+1. Launch `FourEight.app` once. **It will fail.** That failure is what creates the button in step 3.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll down and click **Open Anyway**. This button is only visible for about an hour after step 1.
+4. Enter your login password.
+
+Once is enough. Updates after that are handled by the app.
+
+### Build from source
 
 ```bash
 git clone https://github.com/waylake/four-eight.git
@@ -93,6 +127,14 @@ open FourEight.xcodeproj
 ```
 
 See [HACKING.md](./HACKING.md) for the command-line build and test workflow.
+
+## Updates
+
+The app checks once a day and tells you when a new version exists. **You see what changed and approve it before anything installs.** This app does not rewrite itself behind your back.
+
+Turn the check off in Settings → Updates if you prefer; the "Check now" button stays.
+
+Releases that change how charts are computed say so in the release notes, because a chart you already read may come out differently.
 
 ## Usage
 
