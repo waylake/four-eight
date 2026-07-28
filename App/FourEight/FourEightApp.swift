@@ -6,6 +6,7 @@ struct FourEightApp: App {
     @State private var appState = AppState()
     @State private var modelManager = ModelManager()
     @State private var interpretations = InterpretationStore()
+    @State private var updates = UpdateController()
 
     init() {
         // README용 스크린샷 생성 모드. 화면 기록 권한 없이 뷰를 직접 렌더링한다.
@@ -35,6 +36,13 @@ struct FourEightApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
+            // macOS 관례상 "업데이트 확인"은 앱 메뉴의 정보 바로 아래에 온다.
+            CommandGroup(after: .appInfo) {
+                Button("업데이트 확인…") {
+                    updates.checkForUpdates()
+                }
+                .disabled(!updates.canCheck)
+            }
             CommandGroup(after: .toolbar) {
                 Divider()
                 Button("오늘") { appState.destination = .today }
@@ -58,6 +66,7 @@ struct FourEightApp: App {
             SettingsView()
                 .environment(appState)
                 .environment(modelManager)
+                .environment(updates)
         }
 
         MenuBarExtra {

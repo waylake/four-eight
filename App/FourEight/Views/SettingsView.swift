@@ -10,6 +10,9 @@ struct SettingsView: View {
             Tab("모델", systemImage: "cpu") {
                 ModelManagerView()
             }
+            Tab("업데이트", systemImage: "arrow.triangle.2.circlepath") {
+                UpdateSettingsView()
+            }
             Tab("정보", systemImage: "info.circle") {
                 AboutView()
             }
@@ -161,6 +164,56 @@ struct ModelRow: View {
             }
             .help(message)
         }
+    }
+}
+
+/// 업데이트 설정.
+///
+/// 자동 설치 스위치를 두지 않는다. 확인은 자동으로 하되 설치는 사용자가
+/// 승인한다는 정책이 제품 결정이지 사용자 취향이 아니기 때문이다.
+struct UpdateSettingsView: View {
+    @Environment(UpdateController.self) private var updates
+
+    var body: some View {
+        @Bindable var updates = updates
+        Form {
+            Section {
+                LabeledContent("현재 버전") {
+                    Text(AppVersion.display)
+                        .textSelection(.enabled)
+                }
+                Toggle("업데이트 자동 확인", isOn: $updates.automaticallyChecks)
+                LabeledContent("마지막 확인") {
+                    if let date = updates.lastCheckDate {
+                        Text(date.formatted(.relative(presentation: .named)))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("없음")
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button("지금 확인") {
+                        updates.checkForUpdates()
+                    }
+                    .disabled(!updates.canCheck)
+                }
+            } footer: {
+                Text("새 버전을 찾으면 알려 드립니다. 무엇이 바뀌는지 확인하고 직접 승인하셔야 설치됩니다. 이 앱은 사용자 모르게 스스로를 바꾸지 않습니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Text("만세력 계산 규칙이 바뀌는 업데이트는 릴리스 노트에 명시하고, 설치 후 앱이 한 번 더 알려 드립니다. 이미 보신 명식의 결과가 달라질 수 있기 때문입니다.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("계산이 바뀌는 업데이트")
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
