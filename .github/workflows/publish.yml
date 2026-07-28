@@ -27,10 +27,14 @@ permissions:
 
 jobs:
   promote:
-    name: appcast 발행
+    name: appcast 커밋
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 태그가 아니라 main을 본다. 여기서 appcast를 커밋하므로 태그
+          # 커밋을 체크아웃한 채로 밀면 main을 되감을 위험이 있다.
+          ref: main
 
       - name: 대상 태그 확인
         id: target
@@ -69,46 +73,36 @@ jobs:
           [ "$CODE" = "200" ] || { echo "::error::자산에 접근할 수 없습니다 ($CODE): $URL"; exit 1; }
           echo "검증 통과: $URL"
 
-      - name: Pages 자료 구성
+      - name: appcast를 저장소에 커밋
         run: |
-          mkdir -p site
-          cp staged/appcast.xml site/appcast.xml
-          # 피드 주소를 브라우저로 열었을 때 빈 화면 대신 안내가 보이게 한다.
-          cat > site/index.html <<'HTML'
-          <!doctype html>
-          <html lang="ko">
-          <meta charset="utf-8">
-          <title>FourEight 업데이트 피드</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <style>
-            body { font: 16px/1.7 -apple-system, system-ui, sans-serif; max-width: 34rem;
-                   margin: 12vh auto; padding: 0 1.5rem; color: #2a251f; background: #faf7f0; }
-            code { background: #ece5d8; padding: .15em .4em; border-radius: 4px; font-size: .9em; }
-            a { color: #b43a2e; }
-            @media (prefers-color-scheme: dark) {
-              body { color: #e8e1d6; background: #262320; }
-              code { background: #3a352f; }
-            }
-          </style>
-          <h1>FourEight 업데이트 피드</h1>
-          <p>이 주소는 FourEight 앱이 업데이트를 확인할 때 쓰는 피드입니다.
-             사람이 읽을 내용은 없습니다.</p>
-          <p>앱과 릴리스는 <a href="https://github.com/waylake/four-eight">github.com/waylake/four-eight</a>에 있습니다.</p>
-          <p>피드: <a href="./appcast.xml"><code>appcast.xml</code></a></p>
-          HTML
-
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          cp staged/appcast.xml appcast.xml
+          if git diff --quiet appcast.xml; then
+            echo "이미 커밋된 내용과 같습니다. 그대로 배포합니다."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml
+          git commit -m "chore(appcast): ${{ steps.target.outputs.tag }} 항목 추가"
+          # main이 그사이 움직였다면 실패하는 것이 맞다. 강제로 밀지 않는다.
+          git push origin HEAD:main
 
       - name: 요약
         run: |
-          echo "### appcast 발행됨" >> "$GITHUB_STEP_SUMMARY"
+          echo "### appcast 커밋됨" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- 태그: ${{ steps.target.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- 피드: https://waylake.github.io/four-eight/appcast.xml" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 다음 단계: Pages 워크플로가 사이트를 배포합니다." >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "기존 사용자에게 업데이트가 알려지기 시작합니다. Homebrew cask는 별도로 갱신하세요." >> "$GITHUB_STEP_SUMMARY"
+          echo "배포가 끝나면 기존 사용자에게 업데이트가 알려집니다. Homebrew cask는 별도로 갱신하세요." >> "$GITHUB_STEP_SUMMARY"
+
+  # 배포는 Pages 워크플로 하나에만 맡긴다. 여기서 직접 올리면 배포 경로가
+  # 둘이 되고, 둘이 서로를 덮어쓰는 순간 업데이트 피드가 사라진다.
+  pages:
+    name: 사이트 배포
+    needs: promote
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

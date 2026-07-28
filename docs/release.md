@@ -12,8 +12,9 @@ flowchart LR
     D --> E{직접 실행해<br/>확인}
     E -->|이상 없음| F[릴리스 발행]
     E -->|문제| G[초안 삭제<br/>태그 삭제]
-    F --> H[Publish 워크플로]
-    H --> I[appcast 라이브<br/>사용자에게 알림]
+    F --> H[Publish: appcast를<br/>main에 커밋]
+    H --> I[Pages: web/ + appcast<br/>배포]
+    I --> K[사용자에게 알림]
     F --> J[cask 갱신]
 ```
 
@@ -72,7 +73,9 @@ open -a "$PWD/FourEight.app"
 
 ### 4. 발행한다
 
-GitHub에서 초안 릴리스를 발행합니다. Publish 워크플로가 appcast를 GitHub Pages로 올립니다. **이 시점부터 기존 사용자에게 업데이트가 보입니다.**
+GitHub에서 초안 릴리스를 발행합니다. Publish 워크플로가 `appcast.xml`을 `main`에 커밋하고, 이어서 Pages 워크플로가 사이트(`web/` + `appcast.xml`)를 배포합니다. **이 시점부터 기존 사용자에게 업데이트가 보입니다.**
+
+appcast의 원본은 저장소의 `appcast.xml`입니다. Pages에 떠 있는 파일이 아닙니다. 그래서 배포가 실패하거나 사이트가 망가져도 피드를 되살릴 수 있습니다.
 
 발행 후 다음을 확인합니다. 특히 **서명 검증은 건너뛰지 마십시오** — 서명이 어긋나면 앱이 업데이트를 조용히 거부하고, 사용자는 새 버전이 있다는 사실조차 모릅니다.
 

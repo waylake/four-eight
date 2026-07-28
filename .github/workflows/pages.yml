@@ -1,0 +1,87 @@
+name: Pages
+
+# **Pages를 배포하는 워크플로는 이것 하나뿐이다.**
+#
+# Pages 배포는 덮어쓰기가 아니라 사이트 전체 교체다. 두 워크플로가 각자
+# 올리면 나중에 배포된 쪽이 이기고 상대의 파일은 사라진다. 랜딩페이지만
+# 올리는 배포가 한 번 돌면 appcast.xml이 404가 되고, 그 순간 모든 사용자의
+# 업데이트 확인이 조용히 죽는다. 오류는 어디에도 나지 않는다.
+#
+# 그래서 사이트는 항상 main의 파일에서만 조립한다 — web/ + appcast.xml.
+# 어느 경로로 배포되든 둘 다 들어간다. 실수로 빠뜨릴 방법이 없다.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - web/**
+      - appcast.xml
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+  # 릴리스 발행 후 publish 워크플로가 호출한다.
+  workflow_call:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 사이트 배포
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # workflow_call로 불릴 때 호출자의 ref(태그)가 아니라 main을 본다.
+          # publish가 방금 커밋한 appcast 항목이 포함되어야 한다.
+          ref: main
+
+      - name: 사이트 조립
+        run: |
+          mkdir -p site
+          cp -R web/. site/
+          cp appcast.xml site/appcast.xml
+
+          # 피드가 빠진 사이트를 올리는 것이 이 파이프라인의 최악의 사고다.
+          # 배포 전에 여기서 막는다.
+          if [ ! -s site/appcast.xml ]; then
+            echo "::error::appcast.xml이 없거나 비어 있습니다. 배포를 중단합니다."
+            exit 1
+          fi
+          if ! grep -q "<item>" site/appcast.xml; then
+            echo "::error::appcast.xml에 항목이 없습니다. 배포를 중단합니다."
+            exit 1
+          fi
+
+          # 버전 표시는 최신 항목에서 채운다. 페이지에 하드코딩하면
+          # 릴리스마다 썩고, 썩은 버전 번호는 사용자를 헷갈리게 한다.
+          V=$(grep -o '<sparkle:shortVersionString>[^<]*' site/appcast.xml | head -1 | sed 's/.*>//')
+          if [ -z "$V" ]; then
+            echo "::error::appcast에서 버전을 읽지 못했습니다."
+            exit 1
+          fi
+          sed -i "s/__VERSION__/v$V/g" site/index.html
+          if grep -q "__VERSION__" site/index.html; then
+            echo "::error::치환되지 않은 __VERSION__ 토큰이 남아 있습니다."
+            exit 1
+          fi
+          echo "사이트 조립 완료 — v$V, $(ls site | wc -l | tr -d ' ')개 항목"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: 요약
+        run: |
+          echo "### Pages 배포됨" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 소개 페이지: ${{ steps.deploy.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- 업데이트 피드: ${{ steps.deploy.outputs.page_url }}appcast.xml" >> "$GITHUB_STEP_SUMMARY"

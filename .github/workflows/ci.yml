@@ -80,6 +80,11 @@ jobs:
       - name: Generation entry points are user actions only
         run: bash scripts/check_generation_policy.sh
 
+      # appcast는 append-only다. 이미 나간 항목이 사라지면 그 항목을 근거로
+      # 판단한 구버전 사용자를 되돌릴 방법이 없다.
+      - name: Appcast is append-only and well-formed
+        run: python3 scripts/check_appcast.py
+
   generated:
     name: Generated sources are current
     runs-on: macos-26

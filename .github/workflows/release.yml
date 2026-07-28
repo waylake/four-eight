@@ -143,10 +143,13 @@ jobs:
 
       - name: appcast 갱신 (스테이징)
         run: |
-          # 살아 있는 appcast를 받아 항목을 더한다. appcast는 append-only다.
-          # 한 번 나간 항목은 지우지 않는다.
+          # 원본은 **저장소의 appcast.xml**이다. 예전에는 Pages에 떠 있는
+          # 파일을 받아 왔는데, 그러면 유일한 원본이 배포 산출물 안에만
+          # 있어서 배포 한 번으로 사라질 수 있었다.
+          #
+          # appcast는 append-only다. 한 번 나간 항목은 지우지 않는다.
           mkdir -p out
-          curl -sfL https://waylake.github.io/four-eight/appcast.xml -o out/appcast.xml || true
+          cp appcast.xml out/appcast.xml
 
           python3 scripts/appcast.py \
             --appcast out/appcast.xml \

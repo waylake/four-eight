@@ -25,7 +25,9 @@ AI 코딩 에이전트가 이 저장소에서 작업할 때 알아야 할 것들
 | `ENABLE_HARDENED_RUNTIME` | `false` | ad-hoc 서명과 겹치면 Sparkle 로드가 실패합니다. Developer ID가 생기기 전까지 켜지 마세요 |
 | `ARCHS` | `arm64` | MLX는 Metal 기반이라 Apple Silicon 전용입니다. x86_64 슬라이스는 동작하지 않으면서 빌드 시간만 두 배로 만듭니다 |
 
-**`appcast.xml`을 소급 수정하지 마세요.** append-only로 다룹니다. 잘못 나간 항목은 지우지 말고 더 높은 빌드 번호로 새 릴리스를 올려 덮습니다.
+**`appcast.xml`을 소급 수정하지 마세요.** append-only로 다룹니다. 잘못 나간 항목은 지우지 말고 더 높은 빌드 번호로 새 릴리스를 올려 덮습니다. 파일은 저장소 루트에 있고 릴리스 워크플로가 항목을 더해 커밋합니다. 손으로 고칠 일은 없습니다. `scripts/check_appcast.py`가 CI에서 검사합니다.
+
+**GitHub Pages를 배포하는 워크플로를 새로 만들지 마세요.** `pages.yml` 하나뿐입니다. Pages 배포는 사이트 전체 교체이므로 배포 경로가 둘이 되면 나중에 배포된 쪽이 상대의 파일을 지웁니다. `appcast.xml`이 사라지면 모든 사용자의 업데이트 확인이 조용히 죽습니다 — 오류도 나지 않습니다. 사이트는 항상 `web/` + `appcast.xml`에서 조립됩니다.
 
 ## 빌드와 테스트
 

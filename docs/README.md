@@ -7,6 +7,7 @@
 | [on-device-ai.md](./on-device-ai.md) | 모델 선정, 프롬프트 전략, 라이선스 |
 | [consultation.md](./consultation.md) | 상담 기능의 화면·기능 기획, 하지 않기로 한 것 |
 | [release.md](./release.md) | 릴리스 절차, 버전 규칙, 서명과 배포 채널 |
+| [web/](../web/) | 소개 페이지. `pages.yml`이 `appcast.xml`과 함께 배포합니다 |
 | [adr/](./adr/) | 구조적 결정 기록 |
 | [research/](./research/) | 조사 노트와 출처 |
 
