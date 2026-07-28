@@ -43,8 +43,10 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: FourEight
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        # 빌드 설정에서 주입한다. 릴리스 워크플로가 태그에서 값을 계산해
+        # xcodebuild에 넘긴다. 자세한 규칙은 docs/release.md 참고.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.lifestyle
         LSMinimumSystemVersion: "15.0"
         NSHumanReadableCopyright: "© 2026 waylake. MIT License."
@@ -52,6 +54,9 @@ targets:
         NSSupportsSuddenTermination: false
     settings:
       base:
+        # 로컬 개발 기본값. 릴리스 빌드는 xcodebuild 인자로 덮어쓴다.
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         CODE_SIGN_STYLE: Automatic

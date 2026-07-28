@@ -171,13 +171,18 @@ struct AboutView: View {
                 HStack(spacing: 10) {
                     Text("四八")
                         .font(.hanja(size: 34))
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("FourEight")
                             .font(.title3.weight(.semibold))
                         Text("사주 명식 계산과 온디바이스 해석")
                             .font(.callout)
                             .foregroundStyle(.secondary)
+                        Text(AppVersion.display)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .textSelection(.enabled)
                     }
+                    Spacer(minLength: 0)
                 }
                 Divider()
                 Group {
