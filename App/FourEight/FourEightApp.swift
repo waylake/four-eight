@@ -6,6 +6,7 @@ struct FourEightApp: App {
     @State private var appState = AppState()
     @State private var modelManager = ModelManager()
     @State private var interpretations = InterpretationStore()
+    @State private var consultations = ConsultationStore()
     @State private var updates = UpdateController()
 
     init() {
@@ -24,6 +25,7 @@ struct FourEightApp: App {
                 .environment(appState)
                 .environment(modelManager)
                 .environment(interpretations)
+                .environment(consultations)
                 .frame(minWidth: 1000, minHeight: 660)
         }
         .defaultSize(width: 1180, height: 780)
@@ -51,7 +53,7 @@ struct FourEightApp: App {
                     .keyboardShortcut("2", modifiers: .command)
                 Button("명식") { appState.destination = .chart }
                     .keyboardShortcut("3", modifiers: .command)
-                Button("대화") { appState.destination = .conversation }
+                Button("상담") { appState.destination = .consultation }
                     .keyboardShortcut("4", modifiers: .command)
                 Divider()
                 Button("오늘로 이동") {

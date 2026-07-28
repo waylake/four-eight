@@ -19,8 +19,8 @@ struct ContentView: View {
                         FortuneCalendarView(reading: reading)
                     case .chart:
                         ChartWorkspace(reading: reading)
-                    case .conversation:
-                        ConversationView(reading: reading)
+                    case .consultation:
+                        ConsultationView(reading: reading)
                     }
                 } else {
                     WelcomeView()

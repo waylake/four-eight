@@ -11,7 +11,7 @@ enum Destination: Hashable {
     case today
     case calendar
     case chart
-    case conversation
+    case consultation
 }
 
 @MainActor
@@ -24,6 +24,8 @@ final class AppState {
     var editingPerson: Person?
     /// 캘린더에서 선택한 날. nil이면 오늘.
     var selectedDate: Date?
+    /// 보고 있는 상담. nil이면 새 상담 화면.
+    var selectedConsultationID: UUID?
     /// 캘린더가 보고 있는 달.
     var visibleMonth = Date()
 
@@ -60,6 +62,8 @@ final class AppState {
 
     func select(_ id: Person.ID?) {
         selectedPersonID = id
+        // 상담은 인물에 매인 기록이다. 다른 사람으로 옮기면 선택을 놓는다.
+        selectedConsultationID = nil
         UserDefaults.standard.set(id?.uuidString, forKey: "selectedPerson")
     }
 

@@ -61,7 +61,9 @@ enum ScreenshotRunner {
         state.selectedPersonID = demoPerson.id
         state.options = .default
         let modelManager = ModelManager()
-        let interpretations = InterpretationStore()
+        // 캡처는 사용자의 보관 파일을 건드리지 않는다. 보존 기한 정리도 돌리지 않는다.
+        let interpretations = InterpretationStore(prunesArchive: false)
+        let consultations = ConsultationStore()
 
         guard let reading = state.reading else {
             NSLog("스크린샷: 명식 계산 실패")
@@ -69,26 +71,9 @@ enum ScreenshotRunner {
             return
         }
 
-        // 규칙 엔진으로 해석을 미리 채운다. 모델 없이도 화면이 완성된 상태로 보인다.
-        interpretations.regenerate(
-            key: .init(
-                subject: reading.person.id.uuidString,
-                signature: reading.chart.signature,
-                engine: "template"
-            ),
-            sections: reading.sections,
-            interpreter: TemplateInterpreter()
-        )
-        let fortune = SajuService.fortune(on: Date(), reading: reading)
-        interpretations.regenerate(
-            key: .init(
-                subject: "\(reading.person.id.uuidString)#\(fortune.date.formatted(.iso8601.year().month().day()))",
-                signature: reading.chart.signature,
-                engine: "template"
-            ),
-            sections: fortune.sections,
-            interpreter: TemplateInterpreter()
-        )
+        // 해석을 미리 채우는 코드가 필요 없어졌다. 기준선 문장은 계산
+        // 결과의 일부이므로 화면을 그리는 순간 이미 거기 있다. 스크린샷이
+        // 보여주는 것이 첫 실행 사용자가 실제로 보는 화면과 같아졌다.
 
         func wrap<V: View>(_ view: V) -> AnyView {
             AnyView(
@@ -96,6 +81,7 @@ enum ScreenshotRunner {
                     .environment(state)
                     .environment(modelManager)
                     .environment(interpretations)
+                    .environment(consultations)
                     .background(Color(nsColor: .windowBackgroundColor))
             )
         }
@@ -107,6 +93,8 @@ enum ScreenshotRunner {
                  view: wrap(CaptureShell { ChartWorkspace(reading: reading) })),
             Shot(name: "calendar", size: CGSize(width: 1180, height: 760),
                  view: wrap(CaptureShell { FortuneCalendarView(reading: reading) })),
+            Shot(name: "consultation", size: CGSize(width: 1180, height: 760),
+                 view: wrap(CaptureShell { ConsultationView(reading: reading) })),
         ]
 
         Task { @MainActor in

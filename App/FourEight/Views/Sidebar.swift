@@ -3,6 +3,8 @@ import SajuKit
 
 struct Sidebar: View {
     @Environment(AppState.self) private var appState
+    @Environment(InterpretationStore.self) private var interpretations
+    @Environment(ConsultationStore.self) private var consultations
 
     var body: some View {
         @Bindable var state = appState
@@ -15,8 +17,8 @@ struct Sidebar: View {
                         .tag(Destination.calendar)
                     Label("명식", systemImage: "square.grid.2x2")
                         .tag(Destination.chart)
-                    Label("대화", systemImage: "bubble.left.and.text.bubble.right")
-                        .tag(Destination.conversation)
+                    Label("상담", systemImage: "bubble.left.and.text.bubble.right")
+                        .tag(Destination.consultation)
                 }
             }
 
@@ -51,6 +53,10 @@ struct Sidebar: View {
 
     private func remove(_ person: Person) {
         appState.store.remove(person.id)
+        // 사람을 지우면 그 사람에 대해 쓴 문장도 남을 이유가 없다.
+        // 날짜별 풀이까지 접두사로 함께 지운다.
+        interpretations.discard(subject: person.id.uuidString)
+        consultations.discard(personID: person.id)
         if appState.selectedPersonID == person.id {
             appState.select(appState.store.people.first?.id)
         }
