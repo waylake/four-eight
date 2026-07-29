@@ -41,6 +41,22 @@ jobs:
           # publish가 방금 커밋한 appcast 항목이 포함되어야 한다.
           ref: main
 
+      # **배포 신원을 체크아웃한 커밋으로 바꾼다.**
+      #
+      # v0.4.0에서 실제로 당했다. `release: published`로 도는 publish가
+      # 이 워크플로를 부르면 `github.sha`는 **태그가 가리키는 커밋**이다.
+      # 그 커밋은 이미 main에 push될 때 Pages를 한 번 배포했으므로,
+      # `deploy-pages`가 같은 id로 배포를 만들고 GitHub은 이미 배포된
+      # 것으로 보고 넘긴다. **워크플로는 성공을 보고하고 사이트는 그대로다.**
+      # appcast를 조립하는 데까지는 다 맞았는데 올리는 단계에서 사라졌다.
+      #
+      # 조용히 실패하는 고리다. 사용자에게는 업데이트가 있다는 사실조차
+      # 가지 않고 오류는 어디에도 나지 않는다. 그래서 아래 "배포 확인"이
+      # 이 우회가 통하지 않아도 실패를 보이게 만드는 두 번째 장치다.
+      - name: 배포 신원 결정
+        run: |
+          echo "DEPLOY_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - name: 사이트 조립
         run: |
           mkdir -p site
@@ -70,6 +86,7 @@ jobs:
             echo "::error::치환되지 않은 __VERSION__ 토큰이 남아 있습니다."
             exit 1
           fi
+          echo "EXPECTED_VERSION=$V" >> "$GITHUB_ENV"
           echo "사이트 조립 완료 — v$V, $(ls site | wc -l | tr -d ' ')개 항목"
 
       - uses: actions/configure-pages@v5
@@ -78,6 +95,33 @@ jobs:
           path: site
       - id: deploy
         uses: actions/deploy-pages@v4
+        env:
+          # deploy-pages는 배포 id를 `github.sha`에서 읽는다. 위에서 정한
+          # 체크아웃 커밋으로 덮어써 태그 커밋과 충돌하지 않게 한다.
+          GITHUB_SHA: ${{ env.DEPLOY_SHA }}
+
+      # **배포했다고 말하기 전에 실제로 그것이 서빙되는지 본다.**
+      #
+      # 이 검사가 없던 판에서 v0.4.0의 피드가 배포되지 않은 채 워크플로가
+      # 초록이었다. 성공 보고와 사실이 갈리는 지점이 여기다. 오탐으로
+      # 빨간불이 뜨는 것이 조용히 초록인 것보다 낫다 — 빨간불은 사람이
+      # 보지만 조용한 실패는 아무도 보지 않는다.
+      - name: 배포 확인
+        run: |
+          URL="${{ steps.deploy.outputs.page_url }}appcast.xml"
+          echo "확인 대상: $URL (기대 버전 $EXPECTED_VERSION)"
+          for i in $(seq 1 20); do
+            LIVE=$(curl -sL "$URL" \
+                   | grep -o '<sparkle:shortVersionString>[^<]*' | head -1 | sed 's/.*>//' || true)
+            if [ "$LIVE" = "$EXPECTED_VERSION" ]; then
+              echo "라이브 피드 확인: $LIVE"
+              exit 0
+            fi
+            echo "  ($i/20) 아직 '$LIVE' — 15초 뒤 다시"
+            sleep 15
+          done
+          echo "::error::배포는 성공으로 보고됐지만 피드에 $EXPECTED_VERSION 이 없습니다. 사용자에게 업데이트가 가지 않습니다."
+          exit 1
 
       - name: 요약
         run: |

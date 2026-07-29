@@ -122,6 +122,25 @@ brew update && brew info --cask waylake/tap/four-eight
 
 ## 문제가 생기면
 
+### 발행했는데 사용자에게 업데이트가 안 보인다
+
+먼저 **어디까지 갔는지** 봅니다. 저장소의 `appcast.xml`과 라이브가 다르면 배포 단계에서 끊긴 것입니다.
+
+```bash
+git show origin/main:appcast.xml | grep -c '<item>'
+curl -sL https://waylake.github.io/four-eight/appcast.xml | grep -c '<item>'
+```
+
+v0.4.0에서 실제로 여기서 끊겼습니다. `release: published`로 도는 Publish에서 `github.sha`는 **태그가 가리키는 커밋**인데, 그 커밋은 이미 main에 push될 때 Pages를 한 번 배포했습니다. `deploy-pages`가 같은 id로 배포를 만들자 GitHub이 이미 배포된 것으로 보고 넘겼고, **워크플로는 성공을 보고했습니다.**
+
+지금은 `pages.yml`이 배포 신원을 체크아웃한 커밋으로 덮고, 배포 뒤에 라이브 피드를 실제로 조회해 기대 버전이 없으면 실패합니다. 그래도 막히면 손으로 되살립니다.
+
+```bash
+gh workflow run Pages --ref main
+```
+
+`main`의 HEAD가 태그 커밋과 다르면 신원이 겹치지 않으므로 배포가 통과합니다.
+
 **발행 전이라면** 초안 릴리스와 태그를 지우고 다시 하면 됩니다. 사용자에게 아무것도 나가지 않았습니다.
 
 ```bash
