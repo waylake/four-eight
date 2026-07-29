@@ -6,6 +6,48 @@
     <description>FourEight 업데이트 피드</description>
     <language>ko</language>
     <item>
+      <title>버전 0.4.0</title>
+      <sparkle:version>47</sparkle:version>
+      <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <pubDate>Wed, 29 Jul 2026 05:51:05 +0000</pubDate>
+      <description>&lt;p&gt;상담 화면이 채팅 한 화면이 되었습니다.&lt;/p&gt;
+&lt;p&gt;계산 규칙은 바뀌지 않았습니다. 이미 보신 명식과 해석 내용은 그대로이고, 지난 상담도 그대로 남습니다.&lt;/p&gt;
+&lt;h3&gt;한 화면에서 이어집니다&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;입력창이 움직이지 않습니다.&lt;/strong&gt; 예전에는 고민을 적는 화면과 이어가는 화면이 따로였고, 상담을 여는 순간 적는 자리가 화면 가운데에서 바닥으로 옮겨 갔습니다.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;↩&lt;/code&gt;로 보내고 &lt;code&gt;⇧↩&lt;/code&gt;로 줄을 바꿉니다.&lt;/strong&gt; &lt;code&gt;⌘↩&lt;/code&gt;과 보내기 버튼도 그대로 동작합니다. 한글 조합 중에는 Return을 가로채지 않으므로 마지막 음절이 사라지지 않습니다.&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;esc&lt;/code&gt;로도 생성을 멈출 수 있습니다. &lt;code&gt;⌘.&lt;/code&gt;도 그대로입니다.&lt;/li&gt;
+&lt;li&gt;처음 적은 고민이 이후 발언과 같은 모습으로 보입니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;지난 상담&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;검색이 생겼습니다&lt;/strong&gt;(&lt;code&gt;⌘F&lt;/code&gt;). 고민 원문과 주고받은 말을 모두 찾습니다.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;오늘 · 어제 · 이전&lt;/strong&gt;으로 묶입니다.&lt;/li&gt;
+&lt;li&gt;목록을 접을 수 있습니다(&lt;code&gt;⌥⌘S&lt;/code&gt;). 접으면 읽는 열이 넓어집니다.&lt;/li&gt;
+&lt;li&gt;키보드 위아래로 상담을 옮겨 다닐 수 있습니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;이어 물을 거리&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;답이 끝나면 &lt;strong&gt;이 근거로 더 물을 수 있는 것&lt;/strong&gt;을 제안합니다. 축마다 고정된 문구이고 모델이 만들지 않습니다.&lt;/li&gt;
+&lt;li&gt;누르면 입력창에 넣기만 하고 &lt;strong&gt;보내지 않습니다.&lt;/strong&gt; 고쳐 적으실 수 있습니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;막다른 골목을 없앴습니다&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;쓸 곳을 아직 고르지 않으셨어도 &lt;code&gt;↩&lt;/code&gt;가 동작합니다. 적으신 말을 기록하고, 풀이는 나중에 받으실 수 있습니다.&lt;/li&gt;
+&lt;li&gt;생성이 실패하면 그 자리에 &lt;strong&gt;다시 시도&lt;/strong&gt;가 있습니다.&lt;/li&gt;
+&lt;li&gt;안전 안내가 떠도 적으신 글을 지우지 않습니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;화면 정리&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;컴포저 아래 잔글씨가 다섯 줄에서 &lt;strong&gt;한 줄&lt;/strong&gt;이 되었습니다. AI 고지와 목적지 안내는 그대로 항상 보입니다.&lt;/li&gt;
+&lt;li&gt;&amp;quot;오늘의 기운 함께 보기&amp;quot;를 축 메뉴 안으로 옮겼습니다.&lt;/li&gt;
+&lt;li&gt;복사와 다시 쓰기는 답변에 마우스를 올리면 나옵니다.&lt;/li&gt;
+&lt;li&gt;메뉴 막대에 &lt;strong&gt;상담&lt;/strong&gt; 메뉴가 생겼습니다 — 새 상담, 입력창으로(&lt;code&gt;⇧⌘L&lt;/code&gt;), 상담 검색(&lt;code&gt;⌘F&lt;/code&gt;), 목록 토글(&lt;code&gt;⌥⌘S&lt;/code&gt;), 내보내기(&lt;code&gt;⇧⌘E&lt;/code&gt;).&lt;/li&gt;
+&lt;/ul&gt;</description>
+      <enclosure url="https://github.com/waylake/four-eight/releases/download/v0.4.0/FourEight.zip" length="11693084" type="application/octet-stream" sparkle:edSignature="HRCkT2JLqeaf6iETE9cux1SHCH8Bv0obdv+7/8MDfmjyCGe9LGk5m5aVBw7m/CTPAR6Rrp+7l7NpAU8quuYnBQ==" />
+    </item>
+    <item>
       <title>버전 0.3.1</title>
       <sparkle:version>43</sparkle:version>
       <sparkle:shortVersionString>0.3.1</sparkle:shortVersionString>
