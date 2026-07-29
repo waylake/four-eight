@@ -83,9 +83,19 @@ appcast의 원본은 저장소의 `appcast.xml`입니다. Pages에 떠 있는 �
 # 피드가 application/xml로 서빙되는가
 curl -sI https://waylake.github.io/four-eight/appcast.xml | grep -iE 'HTTP/|content-type'
 
+# 라이브 피드가 실제로 이번 판인가. CDN이 최대 10분(max-age=600) 늦습니다.
+curl -sL https://waylake.github.io/four-eight/appcast.xml \
+  | grep -o '<sparkle:shortVersionString>[^<]*' | head -1
+
 # 피드의 서명이 실제 배포 자산과 맞는가
+#
+# `cut`을 씁니다. `sed 's/.*="//'`로 뽑으면 **빈 문자열이 나옵니다** —
+# base64 서명은 `==`로 끝나는 일이 흔하고, 탐욕적 `.*`가 그 `=`와 닫는
+# 따옴표를 마지막 `="`로 잡아먹습니다. 다행히 sign_update가 바이트 수로
+# 걸러 오류를 내지만, 빈 값을 넘기고 통과했다고 읽을 뻔한 자리입니다.
 SIG=$(curl -sL https://waylake.github.io/four-eight/appcast.xml \
-      | grep -o 'sparkle:edSignature="[^"]*"' | head -1 | sed 's/.*="//;s/"//')
+      | grep -o 'sparkle:edSignature="[^"]*"' | head -1 | cut -d'"' -f2)
+[ ${#SIG} -eq 88 ] || { echo "서명을 못 뽑았습니다: [$SIG]"; }
 ./bin/sign_update --verify /tmp/verify/FourEight.zip "$SIG" \
                   --ed-key-file ~/.four-eight-secrets/sparkle-private-key.txt
 ```
