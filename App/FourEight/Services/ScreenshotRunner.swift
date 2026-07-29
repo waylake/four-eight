@@ -67,10 +67,14 @@ enum ScreenshotRunner {
         // 메모리에만 반영하고 사용자 설정은 건드리지 않는다.
         modelManager.seedForCapture()
         // 캡처는 사용자의 제공자 설정을 읽지 않는다. 빈 UserDefaults를 준다.
-        let remoteProvider = RemoteProviderStore(
-            defaults: UserDefaults(suiteName: "com.waylake.FourEight.capture") ?? .standard
-        )
-        let writers = Writers(local: modelManager, remote: remoteProvider)
+        //
+        // `Writers`에도 같은 것을 준다. 쓸 곳의 선택(`preferredWriter`)까지
+        // 사용자 설정에서 읽으면, 원격을 골라 둔 개발자의 Mac에서 찍은
+        // 이미지에 "제공자 주소를 아직 넣지 않았습니다"가 뜨면서 바로 위
+        // 답변에는 "Gemma가 썼다"고 적힌 자기모순이 나온다. 실제로 그렇게 찍혔다.
+        let captureDefaults = UserDefaults(suiteName: "com.waylake.FourEight.capture") ?? .standard
+        let remoteProvider = RemoteProviderStore(defaults: captureDefaults)
+        let writers = Writers(local: modelManager, remote: remoteProvider, defaults: captureDefaults)
         // 캡처는 사용자의 보관 파일을 건드리지 않는다. 보존 기한 정리도 돌리지 않는다.
         let interpretations = InterpretationStore(prunesArchive: false)
         let consultations = ConsultationStore()

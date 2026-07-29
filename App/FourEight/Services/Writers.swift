@@ -46,18 +46,25 @@ final class Writers {
     let remote: RemoteProviderStore
 
     private(set) var preferred: Kind {
-        didSet { UserDefaults.standard.set(preferred.rawValue, forKey: Keys.preferred) }
+        didSet { defaults.set(preferred.rawValue, forKey: Keys.preferred) }
     }
 
     private enum Keys {
         static let preferred = "preferredWriter"
     }
 
-    init(local: ModelManager, remote: RemoteProviderStore) {
+    /// 주입 가능한 이유는 캡처 때문이다. 스크린샷은 개발자의 설정을 읽으면
+    /// 안 된다 — 읽으면 대표 이미지가 그 사람의 제공자 설정에 따라 달라지고,
+    /// 실제로 "이 앱 안의 Gemma가 썼다"는 출처와 "제공자를 아직 넣지
+    /// 않았습니다"라는 배너가 한 화면에 함께 나오는 자기모순이 찍혔다.
+    private let defaults: UserDefaults
+
+    init(local: ModelManager, remote: RemoteProviderStore, defaults: UserDefaults = .standard) {
         self.local = local
         self.remote = remote
+        self.defaults = defaults
         // 예전 판에는 이 값이 없었다. 없으면 온디바이스다 — 그때는 그것뿐이었다.
-        preferred = UserDefaults.standard.string(forKey: Keys.preferred)
+        preferred = defaults.string(forKey: Keys.preferred)
             .flatMap(Kind.init(rawValue:)) ?? .onDevice
     }
 
