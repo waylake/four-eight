@@ -70,7 +70,8 @@ Drop any one of those corrections and you get a different chart. This case is in
 - **Deterministic engine** — `SajuKit` is a standalone Swift package with no runtime dependencies.
 - **Optional on-device AI** — Gemma 4 E2B or E4B via MLX, downloaded on demand. Stop and resume generation at any point; finished sections are never rewritten.
 - **Evidence-linked interpretation** — every section shows which rules produced it, in the chart *and* in the calendar.
-- **Grounded conversation** — ask about your chart. The model gets the facts and the matched rules, and is told to say it doesn't know rather than invent.
+- **Grounded consultation** — write down what is on your mind and the app picks the myeongni axis, then answers from that axis's rules only. The axis and the evidence are visible before the answer arrives, and every answer carries the rules it actually used. The model is told to say it doesn't know rather than invent.
+- **It reads like a chat** — <kbd>↩</kbd> sends, <kbd>⇧</kbd><kbd>↩</kbd> inserts a newline. Past consultations are searchable and grouped by day, and when an answer finishes the app suggests what else this evidence can answer. Suggestions fill the composer; they never send.
 - **Lunar calendar** — Korean 음양력 conversion including leap months, computed from first principles.
 
 ### Days are not ranked
@@ -215,7 +216,7 @@ Astronomy: VSOP87D truncated Earth series for apparent solar longitude, IAU 1980
 | 1 | Deterministic engine + golden tests | Done |
 | 2 | Chart canvas, luck cycles, settings | Done |
 | 3 | On-device interpretation with evidence chips | Done |
-| 4 | Conversational follow-up questions | Planned |
+| 4 | Conversational follow-up questions | Done |
 | 5 | Fortune calendar (annual, monthly, daily) | Planned |
 | 6 | Compatibility between two charts | Planned |
 | 7 | Print and PDF chart output | Planned |

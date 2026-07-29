@@ -35,6 +35,43 @@ final class AppState {
     /// 캘린더가 보고 있는 달.
     var visibleMonth = Date()
 
+    /// 지난 상담 목록을 보이는가. 접어 두면 읽는 열이 넓어진다.
+    /// 사용자가 접어 둔 것은 다음 실행에도 접혀 있어야 한다.
+    var showsConsultationList: Bool {
+        didSet { UserDefaults.standard.set(showsConsultationList, forKey: "showsConsultationList") }
+    }
+
+    /// 상담 목록 검색어. 창 수명이면 충분하다 — 다음 실행에 검색어가
+    /// 남아 있으면 사용자는 상담이 사라졌다고 읽는다.
+    var consultationQuery = ""
+
+    // MARK: - 포커스 신호
+    //
+    // 메뉴 명령과 칩이 "여기에 커서를 두라"고 말하는 방법이다. 값 자체에는
+    // 뜻이 없고 **바뀌었다는 사실**만 뜻이 있다. 불리언으로 두면 두 번 연속
+    // 부를 때 두 번째가 먹지 않는다.
+    //
+    // 생성은 이 경로로 시작되지 않는다. 포커스만 옮긴다.
+    private(set) var composerFocusToken = 0
+    private(set) var searchFocusToken = 0
+    private(set) var exportRequestToken = 0
+
+    func focusConsultationComposer() { composerFocusToken += 1 }
+
+    /// 목록이 접혀 있으면 검색창이 아직 화면에 없다. 같은 갱신 안에서
+    /// 신호를 보내면 그 뷰의 `onChange`가 아직 살아 있지 않아 조용히
+    /// 삼켜지고, 사용자는 ⌘F를 두 번 눌러야 한다. 펴는 것과 커서를 옮기는
+    /// 것을 한 박자 떼어 놓는다.
+    func focusConsultationSearch() {
+        guard !showsConsultationList else {
+            searchFocusToken += 1
+            return
+        }
+        showsConsultationList = true
+        Task { @MainActor in searchFocusToken += 1 }
+    }
+    func requestConsultationExport() { exportRequestToken += 1 }
+
     var options: SajuOptions {
         didSet { saveOptions() }
     }
@@ -52,6 +89,7 @@ final class AppState {
             options = .default
         }
         useLLM = d.object(forKey: "useLLM") as? Bool ?? true
+        showsConsultationList = d.object(forKey: "showsConsultationList") as? Bool ?? true
         if let saved = d.string(forKey: "selectedPerson"), let id = UUID(uuidString: saved),
            store.people.contains(where: { $0.id == id }) {
             selectedPersonID = id

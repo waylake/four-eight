@@ -139,4 +139,34 @@ struct ConsultationTests {
         #expect(clarifiers.count == ConsultationTopic.allCases.count)
         #expect(titles.count == ConsultationTopic.allCases.count)
     }
+
+    /// 이어 물을 거리도 콘텐츠다. 되묻기와 같은 규약을 받는다.
+    ///
+    /// 특히 **질문이어야 한다.** 권유문("이것도 살펴보세요")이 되면 앱이
+    /// 사용자를 끌고 가는 말이 되고, 그것은 §6-3이 막는 종류의 장치다.
+    /// 물음표로 끝나는지 검사하는 것이 그 경계를 기계적으로 지킨다.
+    @Test("이어 물을 거리가 톤 규약을 지킨다")
+    func followUpsFollowToneRules() {
+        let banned = ["흉일", "길일", "액운", "재앙", "나쁜 날", "좋은 날", "불운한", "운이 나쁜",
+                      "반드시", "틀림없이", "확실히", "해야 합니다"]
+        for topic in ConsultationTopic.allCases {
+            #expect(topic.followUps.count >= 2, "\(topic.rawValue)에 이어 물을 거리가 부족하다")
+            for question in topic.followUps {
+                for phrase in banned {
+                    #expect(!question.contains(phrase), "\(topic.rawValue) 후속 질문에 '\(phrase)' 포함")
+                }
+                #expect(question.hasSuffix("?"), "\(topic.rawValue) 후속 질문이 물음이 아니다 — \(question)")
+                #expect(question.count >= 15)
+                // 상담자가 스스로 적는 말이므로 상담자의 입장에서 쓴다.
+                #expect(!question.contains("당신"), "\(topic.rawValue) 후속 질문이 상담자를 2인칭으로 부른다")
+            }
+        }
+    }
+
+    /// 같은 질문이 두 축에 있으면 축을 바꿔도 같은 것을 묻게 된다.
+    @Test("이어 물을 거리는 전부 다르다")
+    func followUpsAreDistinct() {
+        let all = ConsultationTopic.allCases.flatMap(\.followUps)
+        #expect(Set(all).count == all.count)
+    }
 }

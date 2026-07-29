@@ -44,3 +44,4 @@
 | [0009](./0009-baseline-first-generation-on-demand.md) | 기준선을 항상 두고, 생성은 주문으로만 한다 | accepted |
 | [0010](./0010-consultation-over-open-chat.md) | 열린 채팅 대신 상담 단위로 다룬다 | accepted |
 | [0011](./0011-remote-provider-as-a-destination.md) | 원격 제공자는 새 엔진이 아니라 새 목적지다 | accepted |
+| [0012](./0012-one-screen-chat-for-consultation.md) | 상담을 한 화면의 채팅으로 그린다 | accepted |

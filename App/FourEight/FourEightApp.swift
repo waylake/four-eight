@@ -70,19 +70,44 @@ struct FourEightApp: App {
                 Button("상담") { appState.page = .consultation }
                     .keyboardShortcut("4", modifiers: .command)
                 Divider()
-                // 툴바 항목은 메뉴에도 있어야 한다. 사용자가 툴바를 숨길 수
-                // 있으므로 툴바가 유일한 자리가 될 수 없다는 것이 HIG의 요구다.
-                Button("새 상담") {
-                    appState.page = .consultation
-                    appState.selectedConsultationID = nil
-                }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-                Divider()
                 Button("오늘로 이동") {
                     appState.selectedDate = nil
                     appState.visibleMonth = Date()
                 }
                 .keyboardShortcut("t", modifiers: .command)
+            }
+            // 툴바 항목은 메뉴에도 있어야 한다. 사용자가 툴바를 숨길 수
+            // 있으므로 툴바가 유일한 자리가 될 수 없다는 것이 HIG의 요구다.
+            //
+            // 상담 화면에 있을 때만 켠다. ⌘F를 어느 화면에서나 잡으면 다른
+            // 화면에서 누른 사용자가 영문도 모르고 상담으로 끌려간다.
+            CommandMenu("상담") {
+                Button("새 상담") {
+                    appState.page = .consultation
+                    appState.selectedConsultationID = nil
+                    appState.focusConsultationComposer()
+                }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("입력창으로") { appState.focusConsultationComposer() }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                    .disabled(appState.page != .consultation)
+                Button("상담 검색") { appState.focusConsultationSearch() }
+                    .keyboardShortcut("f", modifiers: .command)
+                    .disabled(appState.page != .consultation)
+                Button(appState.showsConsultationList ? "상담 목록 숨기기" : "상담 목록 보이기") {
+                    appState.showsConsultationList.toggle()
+                }
+                .keyboardShortcut("s", modifiers: [.command, .option])
+                .disabled(appState.page != .consultation)
+
+                Divider()
+
+                Button("이 상담 내보내기…") { appState.requestConsultationExport() }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(appState.page != .consultation || appState.selectedConsultationID == nil)
             }
         }
 
