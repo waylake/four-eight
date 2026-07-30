@@ -1066,3 +1066,583 @@ Claude.ai의 실측 토큰: 어시스턴트 발언은 **말풍선 없는 전폭 
 4. **스트리밍 중 스크롤 3자 불일치**(§22)를 실측으로 가르지 못했습니다.
 5. **후속 칩이 실제로 대화를 이어가게 하는지** 재지 못했습니다. 이 앱에는
    계측이 없고, 넣지 않을 것입니다(§6-3).
+
+---
+
+# 4부 — 2026-07-29 재조사 (SwiftUI 스크롤·마크다운·성능)
+
+3부까지가 **무엇을 그릴 것인가**를 다뤘다면, 이 부는 **그것이 macOS에서
+실제로 되는가**를 다룹니다. 3부 §22가 미해소로 남긴 스크롤 불일치를 여기서
+해소하지는 못했지만, **왜 갈리는지**는 문서 원문으로 확인했습니다.
+
+## 26. 스트리밍 스크롤 — 3자 불일치의 근원을 찾았습니다 `[벤더]`
+
+**Apple 문서가 보장하지 않습니다.** `defaultScrollAnchor(_:)` 원문:
+
+> "The user may scroll away from the initial defined scroll position. When the
+> content size of the scroll view changes, it **may** consult the anchor to
+> know how to reposition the content."
+
+"may consult"입니다. 3부 §22가 잰 3자 불일치는 구현 차이가 아니라 **계약이
+느슨한 것**이었습니다.
+
+`ScrollAnchorRole` 세 역할의 정의(원문):
+
+- `.initialOffset` — 최초 스크롤 위치에 영향
+- `.sizeChanges` — "how a scroll view should adjust its **content offset**
+  when the scroll view's **content or container size changes**"
+- `.alignment` — 콘텐츠가 컨테이너보다 **작을 때**의 정렬
+
+즉 스트리밍 중 바닥 고정에 관여하는 것은 `.sizeChanges`입니다.
+
+출처: <https://developer.apple.com/documentation/swiftui/view/defaultscrollanchor(_:)>,
+<https://developer.apple.com/documentation/swiftui/scrollanchorrole>
+
+### 26.1 자료가 정면으로 갈립니다. 정리하지 않고 둡니다
+
+| 입장 | 출처 |
+|---|---|
+| `defaultScrollAnchor(.bottom)` 단독으로 된다 — "if the user adjusts the scroll position manually, it will scroll freely as normal" | Paul Hudson, 2024-04-11 <https://www.hackingwithswift.com/quick-start/swiftui/how-to-make-a-scrollview-start-at-the-bottom> |
+| 안 된다 — **기존 항목의 내용이 늘어날 때** 실패한다고 명시 분류 | Itsuki, 2025-11-16 <https://medium.com/@itsuki.enjoy/swiftui-2-5-reliable-ways-to-automatically-scroll-to-the-bottom-of-scrollview-1581711e957c> |
+| macOS 15.7.3의 SwiftUI 채팅 앱에서 실제로 실패 — "Message list scrolls **upward**, hiding incoming reply content" (미해결) | <https://github.com/openclaw/openclaw/issues/1279> |
+
+"기존 항목의 내용이 늘어날 때"가 정확히 이 앱의 경우입니다. Hudson이 기술한
+것은 **항목이 추가될 때**로 읽히며, 두 사람이 다른 것을 재고 있을 가능성이
+있습니다. 확정하지 못했습니다.
+
+### 26.2 실패 양식에 이름이 붙어 있습니다 `[1차 — 코드 주석]`
+
+macOS 전용 SwiftUI 에이전트 채팅 `rxtech-lab/rxcode`의 `AutoScrollAnchor.swift`
+헤더 주석이 순진한 구현이 깨지는 자리를 정확히 적습니다.
+
+> "The previous implementation derived `isNearBottom` directly from
+> `distanceFromBottom < threshold` on every geometry update. That fails when a
+> tall card appears mid-stream: the content height grows in one frame, the
+> visible rect hasn't been re-anchored yet, so `distanceFromBottom` briefly
+> exceeds the threshold and `isNearBottom` flips to `false`. Subsequent
+> structure-change callbacks then skip the auto-scroll, **stranding the user
+> above the bottom even though they never scrolled away.**"
+
+해법은 **콘텐츠 성장과 사용자 스크롤을 서로 다른 두 원인으로 분리**하는
+것입니다. 성장했을 때는 바닥 여부를 다시 계산하지 않고, 높이가 안정적일
+때만 다시 계산합니다.
+
+같은 파일에서 확인되는 macOS 고유 관찰 하나:
+
+> "Desktop scroll animations can pass through `.decelerating`; treating that as
+> a release makes the programmatic pin immediately bounce back to the bottom."
+
+따라서 `.decelerating`을 사용자 조작으로 보면 안 됩니다.
+
+출처: <https://github.com/rxtech-lab/rxcode/blob/main/Packages/Sources/RxCodeChatKit/AutoScrollAnchor.swift>
+
+### 26.3 같은 업데이트 사이클에서는 스크롤할 수 없습니다 `[벤더 포럼]`
+
+> "You cannot scroll to an item **added in the same update cycle**; by the time
+> `scrollTo` is called, SwiftUI doesn't know about the new item yet."
+
+이 저장소가 ⌘F 버그에서 이미 배운 것과 같은 형태입니다(§25 지뢰표 —
+"뷰를 만드는 것과 그 뷰에 신호를 보내는 것은 한 박자 떼어 놓을 것").
+
+출처: <https://developer.apple.com/forums/thread/814050>
+
+### 26.4 성능 — 기하 변화를 뷰 상태에 쓰면 안 됩니다 `[벤더]`
+
+`onScrollGeometryChange` 문서 원문:
+
+> "The geometry of a scroll view changes frequently while scrolling. You should
+> avoid updating large parts of your app whenever the scroll geometry changes."
+
+그래서 transform/action 두 단계이고, transform 결과가 `Equatable`하게 바뀔
+때만 action이 뜁니다. 장부를 `@State` 구조체에 두면 이 보호가 무의미해집니다
+— 매 프레임 상태가 바뀌어 재구성이 돕니다.
+
+같은 문서의 또 하나: 계층에 스크롤 뷰가 여럿이면 **첫 번째만** 콜백하고
+런타임 경고가 남습니다. `onScrollPhaseChange`도 같습니다.
+
+출처: <https://developer.apple.com/documentation/swiftui/view/onscrollgeometrychange(for:of:action:)>
+
+### 26.5 `List`를 고르면 스크롤 API 전부를 포기합니다 `[벤더 DTS]`
+
+Apple DTS 엔지니어 답변(2024-12):
+
+> "`.scrollPosition(_:anchor:)` doesn't currently work with a List. Please file
+> an enhancement request via Feedback Assistant."
+
+`defaultScrollAnchor`·`onScrollGeometryChange`·`onScrollPhaseChange`도
+`ScrollView` 대상입니다. 이 화면이 `ScrollView` + `VStack`을 쓰는 이유가
+여기 있습니다.
+
+덧붙여 macOS의 `List`는 지연 로드를 하지 않는다는 보고가 있고(2022, Apple
+답글 없음), `NSTableView` 위의 self-sizing이 "destined to fail on macOS"라는
+분석도 있습니다. 반대로 iOS 벤치마크는 `List`가 `LazyVStack`을 압도합니다
+(바닥까지 스크롤 5.53초 대 52.3초). **어느 자료도 macOS 15에서의 직접 비교
+측정치를 주지 않습니다.** 정리하지 않고 둡니다.
+
+출처: <https://developer.apple.com/forums/thread/770682>,
+<https://developer.apple.com/forums/thread/704778>,
+<https://kean.blog/post/not-list>,
+<https://www.strv.com/blog/swiftui-list-vs-lazyvstack>
+
+## 27. 마크다운 — 파싱은 되지만 렌더링은 안 됩니다 `[벤더]`
+
+이것이 이 절의 핵심 사실입니다.
+
+Foundation의 파서는 `.full`에서 제목·목록·코드블록·인용·표까지
+`PresentationIntent`로 **파싱합니다.** 그러나 SwiftUI `Text`는 그것을
+**그리지 않습니다.** Apple 포럼(2021-08): `NSPresentationIntent` 속성은
+보존되지만 렌더 시 "flattened" — 여러 문단이 문단당 하나가 아니라 **단일
+text layout fragment로 합쳐집니다.**
+
+`Text(LocalizedStringKey)`가 지원하는 것은 **인라인뿐**입니다: 굵게·기울임·
+취소선·인라인 코드·링크. 제목·목록·인용·표·이미지는 무시됩니다. 파서 자체는
+cmark-gfm이며 Apple 엔지니어가 포럼에서 확인했습니다.
+
+`AttributedString.MarkdownParsingOptions.interpretedSyntax`:
+
+- `.inlineOnly` (**기본값**) — 인라인만 해석
+- `.inlineOnlyPreservingWhitespace` — 인라인만 해석하되 **공백·개행 보존**
+- `.full` — 블록까지 해석(하지만 SwiftUI가 안 그림)
+
+기본값을 쓰면 **문단 안의 줄바꿈이 사라집니다.** 이 화면이
+`.inlineOnlyPreservingWhitespace`를 쓰는 이유입니다.
+
+`failurePolicy: .returnPartiallyParsedIfPossible`이 스트리밍 중 반쯤 깨진
+마크다운에 직접 관련됩니다.
+
+**함정**: `Text(문자열변수)`는 마크다운을 파싱하지 **않습니다.** 문자열
+리터럴만 `LocalizedStringKey`로 취급되기 때문입니다. `Text(.init(변수))`가
+필요합니다. 이 화면은 `AttributedString`을 직접 만들므로 해당하지 않습니다.
+
+출처: <https://developer.apple.com/forums/thread/687473>,
+<https://developer.apple.com/forums/thread/682711>,
+<https://developer.apple.com/documentation/foundation/attributedstring/markdownparsingoptions>,
+<https://fatbobman.com/en/posts/attributedstring/>
+
+### 27.1 스트리밍 마크다운 — 증분 파싱 진입점이 없습니다
+
+Foundation에도 SwiftUI에도 없습니다. 둘 다 전체 버퍼를 처음부터 다시
+파싱합니다. 그러나 **비용의 위치가 파싱이 아닙니다.** fatbobman 측정:
+슬라이드 한 장 분량 파싱이 평균 약 0.04초이고, 비싼 것은 **뷰 트리
+재구축**입니다.
+
+공통 완화책이 **블록 단위 청킹**입니다 — 완결된 블록은 캐시하고 진행 중인
+마지막 블록만 매 토큰 다시 봅니다.
+
+미완결 마크업 처리에 두 전략이 보고됩니다.
+
+1. **닫힐 때까지 숨기기** — "if you count the markers and find an odd number,
+   you know the last one is unclosed... hide everything from the unclosed
+   marker onwards until its partner arrives"
+2. **사본에서 자동 닫기** — "Auto-close it temporarily **for rendering
+   purposes**. The original string is never modified."
+
+이 앱은 (2)를 골랐고 **마지막 블록에만** 적용합니다. (1)은 글자가 나타났다
+사라지는 것으로 보입니다.
+
+출처: <https://tigerabrodi.blog/how-to-build-a-performant-ai-markdown-renderer>,
+<https://fatbobman.com/en/posts/a-deep-dive-into-swiftui-rich-text-layout/>
+
+### 27.2 대가 — 여러 `Text`에 걸친 선택은 불가능합니다 `[1차]`
+
+> "Each `Text` view will still be **individually selectable**... There is **no
+> way to select contents of multiple `Text` views at the same time**."
+
+블록마다 `Text`를 만들면 문단을 넘는 드래그 선택을 잃습니다. 알려진 우회는
+`NSTextView`가 레이아웃을 맡고 SwiftUI 뷰를 겹치는 방식뿐입니다.
+
+이 앱은 그 대가를 받아들이고 "복사" 버튼과 마크다운 내보내기로 답변 전체를
+가져가는 경로를 유지합니다.
+
+출처: <https://nilcoalescing.com/blog/EnableTextSelectionForNonEditableText/>
+
+## 28. 확인하지 못한 것 (4부)
+
+정리하지 말고 그대로 둘 것.
+
+1. **실제 스트리밍 중의 따라가기 동작을 실기로 확인하지 못했습니다.**
+   캡처는 완성된 상담만 그립니다. 26.1의 불일치는 여전히 열려 있습니다.
+2. **한글 본문에서 기울임(`*…*`)과 인라인 코드(`` `…` ``)가 시각적으로
+   구분되는지 확인하지 못했습니다.** 캡처에서 굵게·제목·목록·인용·코드
+   블록은 확인했으나, 한글은 이탤릭 자형이 없어 합성 기울임이 약하고
+   모노스페이스 폴백도 라틴만큼 다르지 않아 보입니다.
+3. **`.textSelection(.enabled)`와 macOS VoiceOver의 상호작용**에 관한 자료를
+   전혀 찾지 못했습니다.
+4. **`.textSelection(.enabled)`와 `.contextMenu`를 같은 `Text`에 걸었을 때
+   macOS 우클릭이 어느 쪽으로 가는지** 명시된 문서가 없습니다.
+5. **iOS 18.0의 `List` textSelection 버그(18.1에서 수정)가 macOS에도
+   있었는지** 스레드에 언급이 없습니다.
+6. **마크다운 태스크 리스트(`- [ ]`) 전용 `PresentationIntent.Kind` 케이스의
+   존재 여부**를 확인하지 못했습니다.
+7. **`@State` 구조체 장부가 실제로 얼마나 비싼지 재지 않았습니다.** Apple
+   문서의 경고와 구조적 논증으로 클래스로 옮겼을 뿐, 프로파일링하지
+   않았습니다.
+
+## 29. 4부 결정에 대한 역검증 `[2026-07-29]`
+
+구현을 마친 뒤 일곱 결정을 따로 검증했습니다. **한 건이 뒤집혔고 두 건에서
+기존 전제가 흔들렸습니다.** 정리하지 않고 그대로 적습니다.
+
+### 29.1 뒤집힌 것 — 후속 질문을 평문으로 만들었다가 되돌렸습니다
+
+캡슐 셋이 무거워 보여 평문 목록으로 바꿨습니다. **NN/g 지침의 제목이 그대로
+반대입니다** `[연구]`:
+
+> "**Offer Relevant Suggested Questions as Buttons, Not Text.** To make it
+> easier for users to choose a suggested prompt, present them as clickable
+> buttons, rather than text. This approach avoids unnecessary typing and
+> supports offering multiple suggested prompts without creating a wall of text."
+
+실사용자 조사의 실패 사례가 붙어 있습니다. 물음을 **답변 글 안에 텍스트로**
+넣은 챗봇에서 참가자가 직접 불평했습니다 — "she complained that the questions
+were inserted in the answer text, and she'd have to type them: 'Rather,
+instead of … [making] me type … [I'd prefer] … multiple-choice options'".
+
+**1부 §15.3(1)이 이미 같은 함정을 적어 두었습니다** — "지금은 텍스트를
+버튼처럼 그린 최악의 조합입니다". 방향만 반대로 다시 밟은 것이었습니다.
+
+되돌리면서 원인을 다시 봤습니다. 무거워 보이던 것은 캡슐이 아니라
+**테두리**였습니다. 선을 지우고 옅은 면으로 바꾸면 누를 수 있다는 것은 남고
+소음은 줍니다.
+
+출처: <https://www.nngroup.com/articles/ai-chatbots-design-guidelines/> (2026-04-24)
+
+### 29.2 흔들린 전제 1 — ADR 0012 §4의 Perplexity 근거
+
+ADR 0012 §4는 "관련 질문 캐러셀"을 버릴 이유로 **위치**를 들었습니다 —
+"Perplexity의 티어다운이 자기 화면에 대해 컴포저를 아래로 밀어낸다고
+적는다". 이번 조사는 그 진술을 **확인하지 못했고 반대 증거를 찾았습니다**
+`[3자]`:
+
+> "The '**Ask Follow-up' bar is always present at the bottom**, giving the user
+> an 'escape hatch' to change the topic."
+
+그리고 "캐러셀"이라는 말은 Perplexity의 후속 질문이 아니라 **재생성 변형**
+캐러셀(ChatGPT·Claude 양쪽)과 상품 이미지 캐러셀에서 나옵니다.
+
+**ADR 0012를 고치지 않습니다.** 그 결정(기록의 마지막 요소에 둔다)은
+독립적으로 옳고 이 앱에서 그대로 유지됩니다. 다만 **근거로 든 사실 하나가
+확인되지 않았다**는 것을 여기 남깁니다. 3부 §24에 적은 Perplexity 관련
+진술도 같은 유보를 받습니다.
+
+출처: <https://assets.nextleap.app/submissions/PerplexityUXReview1-f3ba5002-469a-4590-8d33-8365aaab09a8.pdf>
+
+### 29.3 흔들린 전제 2 — 읽기 폭의 근거가 AAA이고 "값"이 아닙니다
+
+WCAG 문구 자체는 정확히 실재합니다 `[표준 원문]`:
+
+> "Width is no more than 80 characters or glyphs (**40 if CJK**)."
+> "Studies have shown that Chinese, Japanese and Korean (CJK) characters are
+> approximately twice as wide as non-CJK characters…"
+
+**그러나 두 가지를 1부가 적지 않았습니다.**
+
+1. SC 1.4.8은 **Level AAA**입니다.
+2. Note 1: "**Content is not required to use these values. The requirement is
+   that a mechanism is available** for users to change these presentation
+   aspects." 즉 이 기준이 요구하는 것은 고정 폭 값이 아니라 **조정 수단**입니다.
+   이 앱에는 읽기 폭 조정 수단이 없습니다.
+
+그리고 비교 대상과 어긋납니다. Claude.ai의 대화 컨테이너는 독립적인
+유저스크립트 3건이 모두 `max-w-3xl`로 지목하고, Tailwind 문서상 그것은
+**768px**입니다 — CJK 40 글리프(약 520pt ≈ 693px)보다 넓습니다. 3부까지
+미해소로 남긴 "640 대 768"은 **768 쪽으로 기울었습니다**(단 여전히 DOM
+클래스에서 추론한 값이고 브라우저에서 잰 값이 아닙니다).
+
+`Measure.reading = 560`을 바꾸지 않습니다. 근거는 WCAG의 준수가 아니라 1부
+§2의 실측(한 행의 한글 글자수)이고 그것은 그대로입니다. 바뀐 것은 **그
+값을 무엇으로 정당화하는가**입니다.
+
+출처: <https://www.w3.org/WAI/WCAG22/Understanding/visual-presentation.html>,
+<https://tailwindcss.com/docs/max-width>,
+<https://gist.github.com/ycvk/2ab589109ef328ffd77c03751c6773a9>
+
+### 29.4 지지된 것
+
+- **인용 칩 중복 제거** `[연구]`. NN/g: "**Place redundant links far apart from
+  each other. If they can be seen together within the same view, then it's an
+  indication that you may have too much redundancy.**" 그리고 "Duplicating
+  features adds significant overhead to **both the scanning process and the
+  comprehension process** … users … have to spend additional time figuring out
+  whether the duplicate is a new feature or an old feature." 헤더와 답변 아래
+  칩은 정확히 "same view"에 함께 보였습니다.
+  <https://www.nngroup.com/articles/duplicate-links/>,
+  <https://www.nngroup.com/articles/reduce-redundancydecrease-duplicated-design-decisions/>
+- **어시스턴트 전폭 무레이블 / 사용자 버블** — 다수가 지지합니다. Claude.ai의
+  사용자 메시지 컨테이너는 `rounded-xl` + 그라디언트 + `max-w-[75ch]`이고
+  어시스턴트 쪽에는 대응 컨테이너가 없습니다. 모방 구현 하나는 이 앱이 한
+  것과 **똑같은 보완**을 적어 둡니다 — "Labels are kept in the DOM for screen
+  readers but **visually hidden**."
+  **반대 출처도 있습니다**: aiuxdesign.guide는 "User messages right-aligned,
+  **AI messages left-aligned. This is a universal convention — don't break
+  it.**" 그리고 "**Full-width messages are hard to read**"라며 양쪽 다 버블에
+  60–75% 폭을 권합니다. 해소하지 않습니다.
+  <https://gist.github.com/ycvk/2ab589109ef328ffd77c03751c6773a9>,
+  <https://www.aiuxdesign.guide/guides/conversational-ui-guide/anatomy-of-a-chat-interface>
+- **인사말을 컴포저 옆에 붙이기** `[연구, 간접]`. NN/g 근접성: "**Proximity is
+  one of the most important grouping principles and can overpower competing
+  visual cues.**" 그리고 "far-away items can be easily overlooked by
+  task-focused users … sometimes described as '**tunnel vision**'." ChatGPT는
+  빈 상태에서 인사말과 컴포저를 **한 덩어리로** 렌더합니다.
+  <https://www.nngroup.com/articles/gestalt-proximity/>
+- **Pew 1%는 실재합니다** `[연구]`. 원문: "Google users who encountered an AI
+  summary also rarely clicked on a link in the summary itself. This occurred in
+  **just 1% of all visits**." 방법론: Ipsos KnowledgePanel 미국 성인 900명,
+  2025년 3월 실제 브라우징 추적, 68,879건 검색 중 12,593건이 AI Overview.
+  **다만 측정 대상은 검색 AI 요약의 클릭이지 채팅 UI의 인용 배치가
+  아닙니다.** §6-2의 근거로 계속 쓰되 이 한계를 함께 적습니다.
+  <https://www.pewresearch.org/short-reads/2025/07/22/google-users-are-less-likely-to-click-on-links-when-an-ai-summary-appears-in-the-results/>
+
+### 29.5 혼재 — 호버 노출
+
+데스크톱 호버는 관행으로 확인되지만, ChatGPT의 **어시스턴트** 액션바는
+"**Always visible** — Copy, Good response, Bad response, Read aloud, Share,
+Regenerate, More"로 기술하는 출처가 있고 사용자 메시지만 호버입니다. 그리고
+호버 방식의 실사용 실패가 OpenAI 포럼에 기록되어 있습니다 — 새 구현이 호버가
+빠질 때 "**COMPLETELY REMOVES THE HTML**"이라 읽어주기 오디오가 끊기고,
+버튼으로 커서를 옮기는 동안 버튼이 사라져 클릭이 안 되는 재현 보고가
+있습니다.
+
+이 앱은 호버를 유지하되 **마지막 답변에는 항상 보입니다.** 그리고 버튼이
+호버 영역 **안에** 있으므로 커서를 옮기는 동안 사라지는 실패는 나지 않습니다.
+확정된 관행이 없다는 것을 기록해 둡니다.
+
+출처: <https://www.assistant-ui.com/examples/chatgpt>,
+<https://community.openai.com/t/chatgpt-message-buttons-removed-when-hover-exits-message-breaking-audio-repaired/1141963>
+
+### 29.6 이번에도 증거를 찾지 못한 것
+
+1. **어시스턴트 답변에 상시 역할 레이블이 있었던 시기가 있는지.** 벤더 문서도
+   아카이브 스크린샷도 없습니다. 한 3자 출처는 Claude가 "You"/"Claude"로
+   레이블한다고 적지만 DOM 증거와 충돌합니다.
+2. **인용을 답 앞에 두는 것과 뒤에 두는 것을 비교한 연구.** 없습니다.
+3. **ChatGPT 열 폭의 DOM·벤더 확증.** 3자 주장(768px)만 있습니다.
+4. **컴포저가 고정된 상태에서 인사말 하단 정렬과 중앙 정렬을 비교한 연구.**
+   없습니다. 일반 근접성 원칙만 있습니다.
+5. **Raycast AI의 시각적 턴 표현.** 공식 매뉴얼에 레이아웃 기술이 없습니다.
+
+## 30. 배포 자산 실측 `[2026-07-29]`
+
+세 번째 조사가 `chatgpt.com`과 `claude.ai`의 **배포된 CSS 번들을 직접 내려받아**
+쟀습니다. 3부까지 티어다운·유저스크립트 추정으로 남아 있던 항목 여럿이
+닫혔습니다.
+
+**방법**: 두 사이트 모두 봇 차단이라 직접 조회가 안 됩니다. ChatGPT는 Wayback의
+`id_` 원본 스냅숏에서 SSR HTML을 받아 링크된 `root-*.css`(1.69 MB)와
+`conversation-small-*.css`(110 KB)를 같은 경로로 취득. Claude는 라이브 번들
+`assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c6a992d55-Cb4ksHML.css`
+(416 KB)를 직접 취득하고 2026-01-21 스냅숏의 `_next/static/css/*` 9개와 교차
+확인. Tailwind는 실제로 쓰인 클래스만 방출하므로 번들에 존재한다는 것은 앱
+어딘가가 참조한다는 뜻입니다. **다만 어느 DOM 노드에 붙는지는 CSS만으로
+확정되지 않습니다.**
+
+### 30.1 말풍선 비대칭 — 1부 §12.1의 미해소 항목이 닫혔습니다
+
+1부는 "티어다운들이 어시스턴트 답변도 bubble이라 부르지만 라이브 DOM을 직접
+재지 않았으므로 해소하지 않는다"고 남겼습니다. **벤더 자산 수준에서 닫힙니다.**
+
+ChatGPT의 디자인 토큰에 사용자 발언용 표면이 **8개 테마 전부에** 있고,
+어시스턴트용은 **0건**입니다.
+
+```
+--black-theme-user-msg-bg   --blue-theme-user-msg-bg   --default-theme-user-msg-bg
+--green-theme-user-msg-bg   --orange-theme-user-msg-bg --pink-theme-user-msg-bg
+--purple-theme-user-msg-bg  --yellow-theme-user-msg-bg   (+ 각 -text)
+```
+
+`--*(assistant|agent|bot)*msg*` 패턴 검색 결과 두 번들 통틀어 0건.
+**어시스턴트 발언에는 "메시지 표면"이라는 개념 자체가 없습니다.**
+
+### 30.2 Claude는 색이 아니라 **서체**로 가릅니다
+
+```css
+--font-claude-response: var(--font-anthropic-serif);
+--font-user-message: var(--font-ui);   /* = anthropic-sans */
+```
+
+답변 전용 타이포 스케일이 통째로 있고, 다크 모드에서 **굵기를 낮춥니다**
+(400→360, 600→530) — 어두운 배경에서 굵어 보이는 것을 보정합니다.
+`--font-dyslexia`와 문자열 `"Dyslexic friendly"`도 있습니다.
+
+이 앱은 색(주사 워시)으로 가릅니다. 세 번째 축(서체)이 있다는 것만 기록합니다.
+
+### 30.3 640 대 768 — **둘 다 맞습니다. 컨테이너 질의로 갈립니다**
+
+1부·3부가 두 번 미해소로 남긴 충돌입니다. ChatGPT SSR HTML의 스레드 컨테이너
+4곳이 전부 같은 조합을 씁니다.
+
+```
+[--thread-content-max-width:40rem] @w-lg/main:[--thread-content-max-width:48rem]
+mx-auto max-w-(--thread-content-max-width)
+```
+
+그리고 CSS에서 `@container main (width>=64rem)`을 확인했습니다. **즉 `main`
+컨테이너가 1024px 미만이면 640px, 이상이면 768px입니다.**
+
+Claude는 `.chat-ui-core .max-w-3xl.px-6` — **768px 컨테이너 − 24×2 = 본문
+720px**, 브레이크포인트 없이 고정입니다.
+
+em(= CJK 글리프 수)으로 환산하면:
+
+| | 본문 실폭 | 본문 크기 | em |
+|---|---|---|---|
+| ChatGPT 좁은 폭 | 640px | 16px | **40** |
+| ChatGPT 넓은 폭 | 768px | 16px | 48 |
+| Claude | 720px | 16px | 45 |
+| **이 앱 (560 − 18×2)** | **524pt** | **13pt** | **약 40** |
+
+**`Measure.reading = 560`은 ChatGPT의 좁은 브레이크포인트와 정확히 같습니다.**
+1부 §2의 세 계산이 수렴한 값이 실측과 맞았습니다.
+
+**다만 두 대표 제품 모두 넓은 창에서 40em을 넘습니다.** 이 앱은 넓히지
+않습니다 — 넓히면 한글 40 글리프(WCAG 1.4.8 CJK 상한)를 넘기 때문이고, 저
+제품들은 CJK를 기준으로 정하지 않았습니다. 29.3의 유보(AAA이고 "값"이 아니라
+"수단"을 요구)는 그대로 유효합니다.
+
+부수 토큰: `--thread-component-gap: 24px`(턴 간격, 이 앱은 20),
+거터 3단 16/24/64px.
+
+### 30.4 컴포저는 본문과 같은 폭이어야 합니다 `[실측]`
+
+폭 상한을 두는 제품 **7 중 5가 컴포저에 정확히 같은 값**을 적용합니다
+(ChatGPT는 같은 CSS 변수, Open WebUI는 같은 리터럴을 두 곳, Ollama 공식 앱·
+Cherry Studio·AnythingLLM·Jan도 동일). **어긋나는 둘은 LM Studio와
+Enchanted이고 둘 다 결함으로 나타납니다** — Enchanted는 메시지 목록에
+`frame(maxWidth:)`가 없고 입력 뷰에만 800이 걸려 창을 넓히면 두 폭이
+벌어집니다.
+
+이 앱은 기록·머리·컴포저가 모두 `Measure.reading`을 씁니다. 지지됩니다.
+
+### 30.5 역할 라벨 — 5 대 5이고, **갈리는 데 규칙이 있습니다**
+
+| 라벨 없음 | 라벨 있음 |
+|---|---|
+| ChatGPT, Claude, Jan, Ollama 공식 앱, AnythingLLM | Open WebUI, LM Studio, Msty, Cherry Studio, Enchanted |
+
+**라벨을 다는 다섯은 전부 메시지마다 모델이 달라질 수 있는 앱이고, 라벨이 그
+자리에서 모델명을 나릅니다.** 이 앱의 provenance 줄(`Gemma 4 E2B · 이 앱 안`,
+상시)이 정확히 그 일을 합니다. 즉 "풀이" 역할 라벨을 빼고 모델 줄을 남긴
+것은 이 다섯과 같은 배치입니다.
+
+"어시스턴트 전폭 평문"은 조사한 **11개 제품 전부**에서 참이며 예외가
+없습니다.
+
+### 30.6 hover 은닉에는 접근성 예외가 달려 있습니다 `[실측-소스]`
+
+ChatGPT는 hover이고 **300ms 지연**까지 겁니다
+(`group-hover/turn-messages:delay-300`).
+
+그런데 Open WebUI는 액션 13곳 전부를 이렇게 씁니다.
+
+```svelte
+class="{($settings?.highContrastMode ?? false) ? 'visible' : 'invisible group-hover:visible'}"
+```
+
+**대비를 높인 사용자에게는 hover 은닉이 전부 해제됩니다.** 그리고 `opacity-0`이
+아니라 `invisible`이라 **자리는 항상 차지합니다** — 나타날 때 줄이 밀리지
+않습니다. Enchanted가 `0`이 아니라 `0.0001`을 쓰는 것도 같은 이유입니다.
+
+**이 앱에 그 예외를 가져왔습니다.** `colorSchemeContrast == .increased`면
+답변 액션이 항상 보입니다. 관례를 가져오면서 그 관례가 이미 달아 놓은
+안전장치도 함께 가져옵니다.
+
+넷(Jan · Cherry Studio · Ollama · Msty)은 **어시스턴트 액션만 상시**로
+빼 두었습니다. Cherry Studio의 `isLatestAssistantMessage`는 이 앱의
+`isLast`와 같은 발상입니다.
+
+### 30.7 결정 3·4에는 선례가 없습니다 — 없다는 것이 확인된 결과입니다
+
+**조사한 11개 제품 중 근거를 전사 상단에 고정하는 것도, 인용을 층 사이에서
+중복 제거하는 것도 없습니다.** ChatGPT에서 `position: sticky`가 걸린 것은
+`#thread-bottom-container` 하나뿐이고 상단 고정 요소는 없습니다.
+
+반증은 아닙니다. 다만 "다른 제품이 하니까"로는 지지되지 않으며, 이 두 결정은
+**이 앱의 정체성(인용에서 생성한다)에서만 나옵니다.** §5의 "구조적 선택의
+부수 효과" 그대로입니다.
+
+가장 가까운 것: Perplexity가 리서치 단계를 산문 **위에** 접어 두고, Jan이
+추론 블록을 답변 위에 두며 최신 스텝 하나만 보입니다.
+
+### 30.8 **NN/g 지침 7이 이 앱의 바닥 따라가기와 어긋납니다** — 해소하지 않습니다
+
+NN/g 원문 `[벤더, 2026-04-24]`:
+
+> "Some chatbots autoscroll users at the end of lengthy responses, forcing
+> users to then scroll back up to read from the beginning. **If a response is
+> longer than the chat viewport, keep the user's scroll position at the top of
+> the new message rather than jumping to the bottom.**"
+
+그리고 ChatGPT가 실제로 그렇게 구현되어 있습니다 `[실측-CSS]`.
+
+```css
+--thread-stream-context-height: max(22*var(--spacing), var(--thread-show-context-pct,1/3)*var(--scroll-root-safe-area-height));
+--thread-response-height: calc(var(--scroll-root-safe-area-height) - var(--thread-stream-context-height));
+/* 그 값을 scroll-margin-bottom으로 건다 */
+```
+
+**뷰포트의 약 2/3를 새 응답용으로 예약하고 상단 1/3은 맥락으로 남깁니다.**
+하단을 쫓는 구조가 아닙니다. Ollama 공식 앱도 전송 시 새 사용자 메시지를
+컨테이너 **상단**으로 보내고 리스트 끝에 동적 spacer를 둡니다. LM Studio에는
+`Scroll message to top on send` 토글이 있습니다.
+
+**그러나 제품은 갈립니다.** 바닥을 따라가고 "맨 아래로"를 주는 쪽이
+Claude · Jan · Open WebUI · AnythingLLM · Cherry Studio로 더 많습니다.
+scroll-to-bottom 어포던스는 사실상 표준이며, 없는 것은 Enchanted 하나이고
+그것은 자동 추종 해제도 없습니다.
+
+**이 앱은 다수 쪽(바닥 따라가기 + 맨 아래로 + 사용자 스크롤 시 해제)을
+유지합니다.** 이유 둘입니다.
+
+1. 이 앱의 답변은 2~3문단으로 짧아 뷰포트를 넘는 일이 드뭅니다. 지침 7의
+   전제("longer than the chat viewport")가 자주 성립하지 않습니다.
+2. **상단 고정 방식을 실기로 확인할 수단이 없습니다.** 캡처 하네스는 완성된
+   상담만 그리므로 스트리밍 동작을 검증할 수 없고, 검증하지 못한 채로 더
+   복잡한 스크롤 체계를 넣는 것은 지금 있는 것보다 나쁩니다.
+
+**이것은 열린 결정입니다.** 답변이 길어지는 변경(지시문의 문단 수 상향,
+더 큰 모델)이 생기면 지침 7이 실제로 물기 시작합니다. 그때 다시 봐야 합니다.
+
+추종 해제 임계값 참고: Open WebUI 5px(`Chat.svelte`)와 50px
+(`Messages.svelte`)이 **같은 저장소 안에서 어긋납니다**. Jan 20px.
+AnythingLLM은 40px에 **방향 판정**까지 겹칩니다 — 하단 근처에 있는 것만으로는
+재개하지 않고 아래로 스크롤해 들어와야 합니다. 이 앱은 44pt이고 방향 대신
+"높이가 변했는가"로 가릅니다.
+
+### 30.9 Raycast — 렌더링 아키텍처를 바꾼 이유가 텍스트입니다 `[벤더, 2026-05-14]`
+
+Raycast v1은 "a native macOS app built with Swift on top of AppKit"이고
+"We didn't make a lot of use of SwiftUI either"였습니다. **v2는 React를
+WKWebView에 띄우는 하이브리드로 바꿨고, 그 이유로 채팅 텍스트 렌더링을 명시적으로
+듭니다.**
+
+> "**Text rendering. AI Chat and any feature involving rich text rendering is
+> where WebKit really shines.**" — "scrolling through long conversations,
+> rendering markdown, handling code blocks with syntax highlighting."
+
+메모리는 200–300MB → 350–450MB.
+
+**이 앱은 반대로 갑니다** — SwiftUI `Text`로 마크다운을 직접 조립합니다.
+그 대가가 27.2(문단을 넘는 선택 불가)이고, Raycast가 지불한 대가는 WebView와
+메모리입니다. 어느 쪽도 공짜가 아니라는 것을 기록해 둡니다.
+
+Raycast의 메시지 렌더링·폭·간격·타이포그래피 문서는 **없습니다**. 확인된 것은
+`↵` 전송 / `⇧↵` 줄바꿈, `⌘R` 재생성, 그리고 스트리밍 중 입력이 막히지 않는다는
+것(`Queue` / `Steer`)입니다.
+
+## 31. 정리하지 않고 남긴 자료 충돌 (4부 누적)
+
+1. `defaultScrollAnchor(.bottom)` 단독 동작 여부 — Hudson(된다) 대
+   Itsuki(안 된다) 대 openclaw #1279(실패 관찰). §26.1.
+2. macOS 줄바꿈 modifier — Zac White(`⌥↩`) 대 SerialCoder(`⌘↩`), 그리고
+   macOS 15.1의 Mail과 Pages가 서로 다름. §2.2(2부 조사).
+3. `List` 대 `LazyVStack` — iOS 벤치마크는 List 압승, macOS 보고는 List가
+   지연 로드조차 안 함. **macOS 15 직접 비교 측정치는 어느 자료에도 없습니다.**
+   §26.5.
+4. Perplexity가 컴포저를 밀어내는가 — 3부·ADR 0012 §4의 전제 대 "Ask
+   Follow-up bar is always present at the bottom". §29.2.
+5. 어시스턴트 전폭 평문 — 11/11 제품 실측 대 aiuxdesign.guide의 "universal
+   convention: AI messages left-aligned, 60–75% 폭". §29.4.
+6. LM Studio 어시스턴트 말풍선 유무 — 스크린샷 3장 대 이슈 #1456. §30.5 각주.
+7. Open WebUI 추종 임계값 — 같은 저장소 안에서 5px 대 50px. §30.8.
+8. 스크롤 정책 — NN/g 지침 7 + ChatGPT·Ollama·LM Studio(상단 고정) 대
+   Claude·Jan·Open WebUI·AnythingLLM·Cherry Studio(바닥 추종). §30.8.
