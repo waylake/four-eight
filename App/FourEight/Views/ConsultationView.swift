@@ -44,11 +44,29 @@ struct ConsultationView: View {
             // 지난 상담이 없으면 목록 칸도 없다. 빈 칸이 한 열을 차지하면
             // 정작 고민을 적을 자리가 좁아진다.
             if showsList {
-                HSplitView {
+                // **`HSplitView`가 아니라 `HStack`인 데는 이유가 있다.**
+                //
+                // `HSplitView`는 자식이 적어 놓은 `minWidth`까지 눌러 주지
+                // 않는다. 실측하면 min 196 + 440 = 636을 선언해 두었는데도
+                // 상세 칸이 **945 밑으로 내려가지 않았다.** 1000pt 창에서
+                // 사이드바를 빼면 상세에 줄 수 있는 폭은 약 764이므로, 남는
+                // 180을 창 밖으로 흘려보내며 글이 잘렸다. 사이드바나 창 너비를
+                // 건드리면 잘리는 자리가 옮겨 다녀 원인이 폭 설정처럼 보인다 —
+                // 실제 원인은 **컨테이너가 창보다 큰 최소 폭을 요구한 것**이다.
+                //
+                // 같은 값으로 `HStack`을 재면 1000pt 창에서 상세가
+                // 705(=264+1+440)로 정확히 접힌다. 선언한 최소를 지킨다.
+                //
+                // 잃는 것은 나눔선 드래그다. 이 칸의 조절 범위가 196~264로
+                // 68pt뿐이라 드래그의 값이 크지 않고, 목록은 ⌥⌘S로 통째로
+                // 접을 수 있다. 세로 축에서 겪은 것과 같은 결함이다 — 컨테이너가
+                // 자기 최소를 창까지 밀어 올리면 창은 줄어드는 대신 자른다.
+                HStack(spacing: 0) {
                     ConsultationListPane(reading: reading)
-                        .frame(minWidth: 200, idealWidth: 244, maxWidth: 320)
+                        .frame(minWidth: 196, idealWidth: 232, maxWidth: 264)
+                    Divider()
                     thread
-                        .frame(minWidth: 440, idealWidth: 640)
+                        .frame(minWidth: 440)
                 }
             } else {
                 thread
@@ -159,11 +177,12 @@ struct ConsultationListPane: View {
                     .foregroundStyle(.tertiary)
                 }
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 7))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            // 채워진 상자에 둘레 여백까지 주면 검색창이 목록 위에 떠 있는
+            // 별개의 물건처럼 보인다. 사이드바의 머리로 읽히도록 채움을 벗기고
+            // 아래 구분선으로 목록과 이어 붙인다.
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .overlay(alignment: .bottom) { Divider() }
 
             // 선택은 List가 관리한다. 예전에는 `.onTapGesture`와
             // `.listRowBackground`로 선택을 흉내 냈고, 그래서 키보드로
@@ -247,6 +266,16 @@ struct ConsultationThread: View {
     @State private var selectedRule: Rule?
     @State private var isExporting = false
     @State private var pendingSend: PendingSend?
+    /// 바닥 따라가기. 뷰가 소유한다 — 상담을 바꾸면 `.id()`가 뷰를 다시
+    /// 만들고 이 값도 함께 초기화되는 것이 맞다.
+    ///
+    /// 클래스이므로 안의 장부가 갱신돼도 재구성이 돌지 않는다. 화면에 영향을
+    /// 주는 것은 `isAwayFromBottom` 하나뿐이다.
+    @State private var follow = BottomFollow()
+    @State private var isAwayFromBottom = false
+
+    /// 기록 맨 아래의 빈 앵커. 스크롤이 겨냥하는 유일한 지점이다.
+    private static let bottomAnchor = "transcript.bottom"
 
     private var phase: ConsultationStore.Phase {
         consultation.map { store.phase(of: $0.id) } ?? .idle
@@ -339,14 +368,35 @@ struct ConsultationThread: View {
 
     // MARK: 시작 화면
 
-    /// 아직 상담이 열리지 않았을 때. **가운데에 짧게.**
+    /// 아직 상담이 열리지 않았을 때. **컴포저 바로 위에 짧게.**
     ///
-    /// 예전에는 여기에 제목 + 편집기 + 버튼 + 축 목록 + 접힌 목록 + 잔글씨
-    /// 네 줄이 있었다. 지금 남은 것은 제목 한 줄, 설명 한 줄, 축 칩이다.
-    /// 나머지는 아래 컴포저와 그 밑 한 줄이 맡는다.
+    /// 예전 판은 이 블록을 화면 **수직 가운데**에 두었다. 컴포저는 바닥에
+    /// 고정되어 있으므로, 큰 창에서는 인사말과 적는 자리 사이에 화면 높이의
+    /// 3분의 1쯤 되는 빈 구멍이 생겼다. 두 요소가 한 덩어리로 읽히지 않고
+    /// 화면이 비어 보이는 원인이 이것이었다.
+    ///
+    /// 아래로 붙인다. 컴포저는 여전히 움직이지 않으므로 ADR 0012 §1은
+    /// 그대로다 — 움직인 것은 인사말이지 적는 자리가 아니다.
+    ///
+    /// **스크롤 뷰인 것이 중요하다. 장식이 아니라 창을 지키는 장치다.**
+    ///
+    /// 예전에는 그냥 `VStack`이었다. 그래서 안쪽 내용의 **최소 높이**가 창까지
+    /// 그대로 전파됐다. `FlowLayout`은 폭 0을 제안받으면 칩을 한 줄에 하나씩
+    /// 놓으므로 축 칩 여섯 개가 약 200pt를 최소 높이로 요구하고, 거기에 제목과
+    /// 설명이 얹혀 상세 칸이 창(712)보다 250pt 더 커졌다. 넘친 만큼 컴포저가
+    /// 화면 밖으로 밀려났고, 분할 뷰의 안전 영역 계산까지 어긋나 사이드바가
+    /// 타이틀바 밑으로 들어갔다.
+    ///
+    /// **네 화면 중 이 화면만 상세 루트가 스크롤 뷰가 아니었다.** 오늘·캘린더·
+    /// 명식이 멀쩡했던 이유가 그것이다 — 스크롤 뷰는 자기 내용의 최소 높이를
+    /// 위로 넘기지 않는다.
+    ///
+    /// 바닥 정렬은 `.defaultScrollAnchor(.bottom)`이 맡는다. `.alignment`
+    /// 역할의 정의가 "내용이 컨테이너보다 **작을 때** 어떻게 정렬할지"이므로,
+    /// 짧으면 아래에 붙고 창이 낮아 넘치면 스크롤된다. 어느 쪽이든 컴포저는
+    /// 제자리를 지킨다.
     private var opening: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
+        ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if let crisis {
                     // 안전 안내가 뜬 자리에 "무엇이 마음에 걸리십니까"와 축
@@ -366,12 +416,13 @@ struct ConsultationThread: View {
                 }
             }
             .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
             .frame(maxWidth: Measure.reading, alignment: .leading)
             .frame(maxWidth: .infinity)
-            Spacer(minLength: 0)
         }
-        // 캡처 경로에서 높이가 0이 되는 `containerRelativeFrame`을 쓰지
-        // 않는다. 스크롤 컨테이너가 아닌 곳의 `Spacer`는 정상적으로 늘어난다.
+        // 짧으면 아래에 붙이고, 창이 낮아 넘치면 스크롤한다.
+        .defaultScrollAnchor(.bottom, for: .alignment)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -434,49 +485,103 @@ struct ConsultationThread: View {
     // MARK: 기록
 
     private func transcript(_ consultation: Consultation) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                // 처음 적은 고민도 사용자의 말이다. 예전에는 이것만 전폭
-                // 카드였고 이후 발언은 말풍선이라, 같은 사람의 말이 두
-                // 모습이었다.
-                PersonBubble(text: consultation.concern)
-                ForEach(consultation.turns) { turn in
-                    TurnBubble(
-                        turn: turn,
-                        // 발언 자신의 기록을 먼저 본다. 상담 단위 값만 보면
-                        // 마지막 값이 모든 답변에 붙어, 이 Mac에서 쓴 답변이
-                        // 원격에서 쓴 것으로 표시된다.
-                        provenance: turn.speaker == .counselor
-                            ? (turn.provenance ?? consultation.provenance) : nil,
-                        // **그 발언이 실제로 쓴** 근거다. 상담 수준 값을
-                        // 넘기면 축을 바꾼 뒤 이전 답변이 쓰지 않은 규칙을
-                        // 인용하게 된다.
-                        evidence: turn.speaker == .counselor ? rules(for: turn.evidenceIDs) : [],
-                        isLast: turn.id == consultation.turns.last?.id,
-                        canRegenerate: aiOffered && !isWriting && !isPreparing,
-                        onRule: { selectedRule = $0 },
-                        onRegenerate: { requestAnswer(regenerating: true) }
-                    )
-                    .id(turn.id)
+        // 머리에 이미 보이는 근거는 답변 밑에 다시 적지 않는다. 예전에는 같은
+        // 칩 두 줄이 한 화면에 있었고, 둘째 줄은 아무것도 알려주지 않으면서
+        // 답변마다 한 줄씩 자리를 먹었다(§7 — 전부 표시하면 아무것도 표시하지
+        // 않은 것과 같다). 축을 바꾼 뒤의 옛 답변만 자기 근거가 다르므로,
+        // **다를 때만** 나온다.
+        let headerEvidence = Set(consultation.evidenceIDs)
+
+        return ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // 처음 적은 고민도 사용자의 말이다. 예전에는 이것만 전폭
+                    // 카드였고 이후 발언은 말풍선이라, 같은 사람의 말이 두
+                    // 모습이었다.
+                    PersonBubble(text: consultation.concern)
+                    ForEach(consultation.turns) { turn in
+                        TurnBubble(
+                            turn: turn,
+                            // 발언 자신의 기록을 먼저 본다. 상담 단위 값만 보면
+                            // 마지막 값이 모든 답변에 붙어, 이 Mac에서 쓴 답변이
+                            // 원격에서 쓴 것으로 표시된다.
+                            provenance: turn.speaker == .counselor
+                                ? (turn.provenance ?? consultation.provenance) : nil,
+                            // **그 발언이 실제로 쓴** 근거다. 상담 수준 값을
+                            // 넘기면 축을 바꾼 뒤 이전 답변이 쓰지 않은 규칙을
+                            // 인용하게 된다.
+                            evidence: turn.speaker == .counselor
+                                && Set(turn.evidenceIDs) != headerEvidence
+                                ? rules(for: turn.evidenceIDs) : [],
+                            isLast: turn.id == consultation.turns.last?.id,
+                            canRegenerate: aiOffered && !isWriting && !isPreparing,
+                            onRule: { selectedRule = $0 },
+                            onRegenerate: { requestAnswer(regenerating: true) }
+                        )
+                        .id(turn.id)
+                    }
+                    if case .failed(let message) = phase {
+                        FailureNote(message: message) { requestAnswer(regenerating: true) }
+                    }
+                    if let crisis {
+                        CrisisCard(matched: crisis) { self.crisis = nil }
+                    }
+                    followUps(consultation)
+                    // 스크롤이 겨냥하는 지점. 마지막 발언의 id를 겨냥하면 그
+                    // 발언이 자라는 동안 목표가 함께 움직인다.
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.bottomAnchor)
                 }
-                if case .failed(let message) = phase {
-                    FailureNote(message: message) { requestAnswer(regenerating: true) }
-                }
-                if let crisis {
-                    CrisisCard(matched: crisis) { self.crisis = nil }
-                }
-                followUps(consultation)
+                .padding(.horizontal, 18)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
+                .frame(maxWidth: Measure.reading, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 16)
-            .padding(.bottom, 8)
-            .frame(maxWidth: Measure.reading, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            // 기록이 뷰포트보다 짧을 때 위로 붙인다. 아래로 붙이면 고정 머리
+            // 밑에 빈 구멍이 생긴다.
+            .defaultScrollAnchor(.top, for: .alignment)
+            // 자라는 동안 바닥을 따라간다. `.defaultScrollAnchor(.bottom,
+            // for: .sizeChanges)`를 쓰지 않는 이유는 BottomFollow에 적어 두었다
+            // — 문서가 "may consult"라고 쓴 동작에 스트리밍을 맡길 수 없다.
+            .followsBottom(
+                follow, anchorID: Self.bottomAnchor, proxy: proxy, isAway: $isAwayFromBottom
+            )
+            .overlay(alignment: .bottom) { jumpToBottom(proxy) }
         }
-        // 정렬은 위, 크기 변화는 아래. `.bottom` 하나만 주면 기록이 뷰포트보다
-        // 짧을 때 내용이 아래로 붙고 고정 머리 밑에 빈 구멍이 생긴다.
-        .defaultScrollAnchor(.top, for: .alignment)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+    }
+
+    /// 사용자가 위를 읽는 동안 답이 아래에서 자랄 때만 나온다.
+    ///
+    /// 이것은 붙잡는 장치가 아니라 길 안내다(§6-4). 사용자가 스스로 올라간
+    /// 것을 앱이 되돌리지 않으면서, 지금 어디서 무슨 일이 일어나는지 알린다.
+    @ViewBuilder
+    private func jumpToBottom(_ proxy: ScrollViewProxy) -> some View {
+        if isAwayFromBottom {
+            Button {
+                follow.resume()
+                isAwayFromBottom = false
+                withAnimation(.easeOut(duration: 0.18)) {
+                    proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(isWriting ? "쓰는 중" : "맨 아래로")
+                }
+                .font(.caption2)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(.separator, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.bottom, 10)
+            .transition(.opacity)
+        }
     }
 
     /// 이어 물을 거리. **답이 끝났을 때만, 기록 안에.**
@@ -494,27 +599,42 @@ struct ConsultationThread: View {
             && consultation.turns.last?.speaker == .counselor
             && consultation.turns.last?.isComplete == true
         if ready {
-            VStack(alignment: .leading, spacing: 6) {
+            // **버튼처럼 보여야 한다.** 한때 이것을 평문 목록으로 바꿨다가
+            // 되돌렸다. NN/g의 지침은 제목이 그대로 근거다 — "Offer Relevant
+            // Suggested Questions as **Buttons, Not Text**". 실사용 조사에서
+            // 물음을 글로 제시한 챗봇은 사용자가 그것을 **다시 타이핑해야
+            // 한다고 읽었고**, 참가자가 직접 그 불편을 말했다.
+            //
+            // 이 저장소의 조사 노트가 이미 같은 함정을 적어 두었다(1부 §15.3)
+            // — "텍스트를 버튼처럼 그린 최악의 조합". 방향만 반대로 다시 밟은
+            // 것이었다.
+            //
+            // 무거워 보이던 원인은 캡슐이 아니라 **테두리**였다. 선을 지우고
+            // 옅은 면으로 바꾸면 누를 수 있다는 것은 남고 소음은 준다.
+            VStack(alignment: .leading, spacing: 5) {
                 Text("이 근거로 더 물을 수 있는 것")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                FlowChips {
-                    ForEach(consultation.topic.followUps, id: \.self) { question in
-                        Button {
-                            draft = question
-                            appState.focusConsultationComposer()
-                        } label: {
-                            Text(question)
-                                .font(.caption)
-                                .multilineTextAlignment(.leading)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .overlay(Capsule().strokeBorder(.separator, lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .help("입력창에 넣습니다. 고쳐 적으셔도 됩니다.")
+                ForEach(consultation.topic.followUps, id: \.self) { question in
+                    Button {
+                        draft = question
+                        appState.focusConsultationComposer()
+                    } label: {
+                        Text(question)
+                            .font(.callout)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 6)
+                            .background(
+                                .quaternary.opacity(0.4),
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("입력창에 넣습니다. 보내지 않으니 고쳐 적으셔도 됩니다.")
                 }
             }
             .padding(.top, 2)
@@ -522,9 +642,17 @@ struct ConsultationThread: View {
     }
 
     /// 이 상담이 쓰는 축과 근거. 스크롤과 무관하게 항상 보인다.
+    ///
+    /// 예전 판은 이 좁은 띠에 다섯 가지를 적었다 — 축 메뉴, 축 이름, "오늘의
+    /// 기운 포함", "근거 N개 · 최근 발언 N개", 그리고 칩 줄. 화면에서 가장
+    /// 작은 글씨가 가장 많은 말을 하고 있었다.
+    ///
+    /// 남긴 것은 **무엇으로 읽는가**(축)와 **무엇을 보고 쓰는가**(근거 칩)
+    /// 둘뿐이다. 이 둘이 §6-2가 답 앞에 두라고 한 것이다. 세는 말("근거 2개")은
+    /// 칩이 이미 보여 주므로 지웠고, 무엇을 기억하지 않는지는 도움말로 내렸다.
     private func pinnedHeader(_ consultation: Consultation) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 // 이 화면에서 결과를 가장 크게 바꾸는 조작이다 — 축을 바꾸면
                 // 근거 전체가 바뀐다. "오늘 기운"도 같은 성격이므로 같은
                 // 메뉴에 둔다. 머리에 컨트롤이 둘이면 어느 쪽이 주인지 모른다.
@@ -548,34 +676,30 @@ struct ConsultationThread: View {
                         set: { store.setIncludesToday($0, for: consultation.id) }
                     ))
                 } label: {
-                    Text("축: \(consultation.topic.title)")
+                    Text(consultation.topic.title)
                         .font(.caption.weight(.medium))
                 }
                 .menuStyle(.borderlessButton)
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .fixedSize()
-                .help("\(consultation.topic.axis)로 읽습니다. 축을 바꾸면 이후 풀이의 근거가 바뀝니다 — 이미 받은 답변은 자기 근거를 그대로 유지합니다.")
+                .help("\(consultation.topic.axis)로 읽습니다. 축을 바꾸면 이후 풀이의 근거가 바뀝니다 — 이미 받은 답변은 자기 근거를 그대로 유지합니다. 이 상담은 아래 근거와 처음 적으신 고민, 최근 발언 \(String(CounselBrief.recentTurnWindow))개만 봅니다.")
 
-                Text(consultation.topic.axis)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                if consultation.includesToday {
-                    Text("오늘의 기운 포함")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                // 무엇을 보고 무엇을 기억하지 않는지. 근거 옆이 제자리다.
-                Text("근거 \(String(evidence.count))개 · 최근 발언 \(String(CounselBrief.recentTurnWindow))개")
+                // 축 이름은 남긴다. 근거가 왜 이것들인지를 말하는 유일한 줄이고,
+                // 이 앱이 파는 것이 바로 그 연결이다(§8).
+                Text(consultation.includesToday
+                     ? "\(consultation.topic.axis) · 오늘의 기운"
+                     : consultation.topic.axis)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                    .help("이 상담은 위 근거와 처음 적으신 고민, 그리고 최근 발언 \(String(CounselBrief.recentTurnWindow))개만 봅니다. 그 밖의 것은 기억하지 않습니다.")
+                    .lineLimit(1)
+                Spacer(minLength: 0)
             }
             EvidenceChips(rules: evidence, onRule: { selectedRule = $0 })
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 8)
+        .padding(.top, 7)
+        .padding(.bottom, 8)
         .frame(maxWidth: Measure.reading, alignment: .leading)
         .frame(maxWidth: .infinity)
         .background(.bar)
@@ -620,11 +744,16 @@ struct ConsultationThread: View {
             disclosure
         }
         .padding(.horizontal, 18)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.top, 9)
+        .padding(.bottom, 11)
         .frame(maxWidth: Measure.reading, alignment: .leading)
         .frame(maxWidth: .infinity)
-        .background(.background)
+        // 머리와 같은 재질과 구분선을 준다. 기록이 위아래 두 띠 사이에 놓이면
+        // 어디까지가 읽는 자리이고 어디부터가 적는 자리인지 한눈에 갈린다.
+        // 예전에는 배경색이 같아서, 기록이 길어지면 마지막 문장이 입력창에
+        // 그대로 닿았다.
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
     }
 
     private var placeholder: String {
@@ -730,6 +859,10 @@ struct ConsultationThread: View {
 
     /// 컴포저의 Return과 보내기 버튼이 부르는 유일한 자리.
     private func submit() {
+        // 사용자가 방금 말을 걸었다. 위를 읽다가 보낸 것이라도 이때는 아래로
+        // 따라가는 것이 맞다 — 자기가 보낸 말의 답을 보려는 것이기 때문이다.
+        follow.resume()
+        isAwayFromBottom = false
         if consultation == nil {
             open()
         } else {
@@ -801,6 +934,10 @@ struct ConsultationThread: View {
     /// 누를 기회를 주는 것 자체가 잘못이다.
     private func requestAnswer(regenerating: Bool = false) {
         guard let consultation else { return }
+        // 다시 쓰기와 다시 시도도 사용자의 조작이다. 새 답이 아래에 붙으므로
+        // 따라가지 않으면 눌러 놓고 아무 일도 없는 것처럼 보인다.
+        follow.resume()
+        isAwayFromBottom = false
         let text = regenerating ? "" : draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard regenerating || !text.isEmpty else { return }
 
@@ -931,18 +1068,24 @@ struct PersonBubble: View {
 
     var body: some View {
         HStack {
-            Spacer(minLength: 48)
+            // 사용자의 말은 대개 짧고 답변은 길다. 말풍선이 전폭까지 자라면
+            // 두 발언이 같은 무게로 읽힌다. 왼쪽을 더 비워 둔다.
+            Spacer(minLength: 72)
             Text(text)
                 .font(.body)
                 .lineSpacing(3)
                 .textSelection(.enabled)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 9)
+                // 주사색을 남긴다. "풀이" 라벨의 주사 막대를 지운 뒤로 기록에
+                // 남은 유일한 색이고, 어느 쪽이 내 말인지를 정렬과 함께 말한다.
                 .background(
                     Ink.cinnabar.opacity(0.09),
                     in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                 )
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("적으신 말. \(text)")
     }
 }
 
@@ -984,25 +1127,35 @@ struct TurnBubble: View {
     /// 보이면 답변마다 회색 줄이 하나씩 붙어 기록이 잡음으로 찬다.
     @State private var hovering = false
 
+    /// 대비를 높인 사용자에게는 숨기지 않는다.
+    ///
+    /// hover 은닉은 "있는 것을 안 보이게" 하는 장치이므로, 대비를 올려 쓰는
+    /// 사람에게는 그대로 접근성 문제가 된다. Open WebUI가 액션 13곳 전부에
+    /// 같은 예외를 두고 있다 — `highContrastMode`면 `invisible group-hover:
+    /// visible` 대신 `visible`이다. 관례를 가져오면서 그 관례가 이미 달아
+    /// 놓은 안전장치도 함께 가져온다.
+    @Environment(\.colorSchemeContrast) private var contrast
+
     var body: some View {
         switch turn.speaker {
         case .app:
-            // 앱이 결정론적으로 말한 것. 채워진 카드 대신 왼쪽 얇은 선으로
-            // 구분한다 — 그릇을 하나 줄이면 경쟁하는 문법이 줄어든다.
-            HStack(alignment: .top, spacing: 9) {
+            // 앱이 결정론적으로 말한 것. 왼쪽 얇은 선 하나로만 구분한다.
+            // 예전에는 선과 아이콘이 함께 있었다 — 표시가 둘이면 둘 다
+            // 약해지고, 아이콘은 이 말이 무엇인지 더 알려주지 않았다.
+            HStack(alignment: .top, spacing: 11) {
                 Rectangle()
-                    .fill(.tertiary)
+                    .fill(.quaternary)
                     .frame(width: 2)
-                Image(systemName: "text.book.closed")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 Text(turn.text)
                     .font(.callout)
                     .lineSpacing(3)
+                    .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 Spacer(minLength: 0)
             }
             .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("앱이 확정한 말. \(turn.text)")
 
         case .person:
             PersonBubble(text: turn.text)
@@ -1010,31 +1163,38 @@ struct TurnBubble: View {
         case .counselor:
             // 가장 길고 가장 많이 읽는 글이다. 말풍선에 가두지 않고 전폭
             // 평문으로 둔다 — Claude가 어시스턴트 발언에 하는 것과 같다.
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Rectangle()
-                        .fill(Ink.cinnabar)
-                        .frame(width: 3, height: 13)
-                    Text("풀이")
-                        .font(.subheadline.weight(.semibold))
-                    if !turn.isComplete {
-                        ProgressView().controlSize(.small).scaleEffect(0.7)
-                        // 스피너에 라벨을 붙이지 말라는 지침과, 생성 중에는
-                        // 무슨 일이 일어나는지 알리라는 지침이 어긋난다.
-                        // 생성 화면에서는 후자를 택한다.
+            //
+            // "풀이"라는 제목 줄이 있었다. 지웠다. 답변마다 주사 막대와 굵은
+            // 글씨 한 줄이 붙어 기록에서 가장 눈에 띄는 것이 **내용이 아니라
+            // 라벨**이었다. 이것이 AI가 쓴 글이라는 사실은 답변 밑의 출처 한
+            // 줄과 컴포저 밑 고지가 이미 말한다(ADR 0012 §3).
+            VStack(alignment: .leading, spacing: 9) {
+                if !turn.isComplete {
+                    // 스피너에 라벨을 붙이지 말라는 지침과, 생성 중에는 무슨
+                    // 일이 일어나는지 알리라는 지침이 어긋난다. 생성 화면에서는
+                    // 후자를 택한다. 완성되면 이 줄은 사라진다.
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small).scaleEffect(0.65)
                         Text("근거를 읽고 쓰는 중")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
+                        Spacer(minLength: 0)
                     }
-                    Spacer(minLength: 0)
                 }
 
                 if !turn.text.isEmpty {
-                    Text(turn.text)
-                        .font(.body)
-                        .lineSpacing(4)
+                    MarkdownProse(text: turn.text, isStreaming: !turn.isComplete)
                         .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // 눈으로는 정렬과 그릇이 누구의 말인지 말해 주지만
+                        // VoiceOver에는 그 단서가 없다. "풀이" 라벨을 지우면서
+                        // 화면에서 사라진 정보를 여기서 되돌려 준다 — 지운 것은
+                        // 잉크이지 사실이 아니다.
+                        //
+                        // 블록마다 나뉜 `Text`를 하나로 묶는다. 묶지 않으면
+                        // 문단마다 따로 읽히면서 누구의 말인지는 어디에도
+                        // 붙지 않는다.
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("명리 풀이, AI 모델이 썼습니다. \(turn.text)")
                         .accessibilityAddTraits(turn.isComplete ? [] : .updatesFrequently)
                 }
 
@@ -1059,7 +1219,7 @@ struct TurnBubble: View {
                 .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 0)
-            if hovering || isLast {
+            if hovering || isLast || contrast == .increased {
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(turn.text, forType: .string)
