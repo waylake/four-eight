@@ -6,6 +6,52 @@
     <description>FourEight 업데이트 피드</description>
     <language>ko</language>
     <item>
+      <title>버전 0.5.0</title>
+      <sparkle:version>55</sparkle:version>
+      <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <pubDate>Thu, 30 Jul 2026 05:35:02 +0000</pubDate>
+      <description>&lt;p&gt;상담 화면에서 말을 줄이고, 창이 좁아도 내용이 잘리지 않게 했습니다.&lt;/p&gt;
+&lt;p&gt;계산 규칙은 바뀌지 않았습니다. 이미 보신 명식과 해석 내용은 그대로이고, 지난 상담도 그대로 남습니다.&lt;/p&gt;
+&lt;h3&gt;상담 화면이 조용해졌습니다&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;근거 칩이 한 번만 나옵니다.&lt;/strong&gt; 예전에는 같은 칩이 머리와 답변 밑에 글자까지 똑같이 두 줄로 있었습니다. 이제 머리에만 있고, 축을 바꾼 뒤의 옛 답변처럼 &lt;strong&gt;그 답변이 실제로 쓴 근거가 다를 때만&lt;/strong&gt; 답변 밑에 함께 표시됩니다.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;답변 위의 &amp;quot;풀이&amp;quot; 라벨을 지웠습니다.&lt;/strong&gt; 답변마다 굵은 글씨 한 줄이 붙어 기록에서 가장 눈에 띄는 것이 내용이 아니라 라벨이었습니다. 이 글을 AI가 썼다는 사실은 답변 밑의 모델 표시와 입력창 밑 고지가 그대로 말합니다.&lt;/li&gt;
+&lt;li&gt;처음 화면의 인사말이 입력창 바로 위로 내려왔습니다. 예전에는 둘 사이에 화면 높이의 3분의 1이 비어 있었습니다.&lt;/li&gt;
+&lt;li&gt;머리에 있던 &amp;quot;근거 N개 · 최근 발언 N개&amp;quot;를 지웠습니다. 칩이 이미 보여 주고 있고, 무엇을 기억하지 않는지는 축 메뉴의 도움말에 있습니다.&lt;/li&gt;
+&lt;li&gt;지난 상담 목록 칸이 넓은 창에서 창의 4분의 1까지 자라던 것을 고쳤습니다.&lt;/li&gt;
+&lt;li&gt;기록과 입력창 사이에 구분이 생겼습니다. 예전에는 배경색이 같아 긴 기록의 마지막 문장이 입력창에 그대로 닿았습니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;풀이 본문을 제대로 그립니다&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;굵게·기울임·목록·인용·제목·코드가 제대로 표시됩니다.&lt;/strong&gt; 예전에는 모델이 마크다운을 쓰면 &lt;code&gt;**&lt;/code&gt; 같은 기호가 글자 그대로 보였습니다.&lt;/li&gt;
+&lt;li&gt;쓰는 중에도 기호가 깜빡이지 않습니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;쓰는 동안 화면이 답을 따라갑니다&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;답이 길어져도 화면이 바닥을 따라갑니다.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;위로 올려 읽으시면 따라가기를 멈춥니다.&lt;/strong&gt; 앱이 화면을 다시 끌어내리지 않고, 그때 &amp;quot;맨 아래로&amp;quot;가 나타납니다.&lt;/li&gt;
+&lt;li&gt;긴 문단이 한 번에 들어와도 답이 화면 밖에서 써지지 않습니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;창이 좁아도 잘리지 않습니다&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;창을 좁히거나 사이드바를 넓게 끌면 글이 화면 밖으로 잘려 나가던 문제를 고쳤습니다.&lt;/strong&gt; 상담에서는 입력창이 화면 밖으로 밀려나고 사이드바가 제목줄 밑으로 들어가기도 했습니다. 명식과 캘린더에서도 같은 문제가 있었습니다.&lt;/li&gt;
+&lt;li&gt;이제 창이 좁아지면 내용이 접히거나 스크롤됩니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;접근성&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;VoiceOver가 어느 발언이 AI 풀이인지 다시 알려 줍니다.&lt;/li&gt;
+&lt;li&gt;대비를 높여 쓰시면 답변의 복사·다시 쓰기가 항상 보입니다. 예전에는 마우스를 올려야만 나타났습니다.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;달라진 것&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;창의 최소 너비가 1000에서 1100으로 늘었습니다.&lt;/strong&gt; 네 화면 중 가장 넓은 명식이 사이드바를 최대로 끌었을 때 요구하는 폭이 그것입니다. 이 값이 작아서 내용이 잘리고 있었습니다.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;칸 사이 나눔선을 끌어 폭을 조절하는 기능이 없어졌습니다.&lt;/strong&gt; 명식·캘린더·상담 세 화면입니다. 그 나눔선이 각 칸이 적어 놓은 최소 폭을 지키지 않아 잘림의 원인이었습니다.&lt;/li&gt;
+&lt;li&gt;여러 문단에 걸쳐 드래그로 한 번에 선택하는 것이 안 됩니다. 문단 안에서는 됩니다. 답변 전체는 &amp;quot;복사&amp;quot; 버튼이나 마크다운 내보내기로 가져가실 수 있습니다.&lt;/li&gt;
+&lt;/ul&gt;</description>
+      <enclosure url="https://github.com/waylake/four-eight/releases/download/v0.5.0/FourEight.zip" length="11741804" type="application/octet-stream" sparkle:edSignature="C5SemugbWt4VISCeVP9/gOcdKJnYTWdq/zx5I6B//llC8HnnBPP4mfteypNmyIyDIS0hivWQX3aoYUIvGTttBw==" />
+    </item>
+    <item>
       <title>버전 0.4.0</title>
       <sparkle:version>47</sparkle:version>
       <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
