@@ -26,6 +26,7 @@ struct FourEightApp: App {
         if let path = ScreenshotRunner.requestedPath {
             DispatchQueue.main.async { ScreenshotRunner.run(outputPath: path) }
         }
+
     }
 
     var body: some Scene {
@@ -40,7 +41,17 @@ struct FourEightApp: App {
                 .environment(writers)
                 .environment(interpretations)
                 .environment(consultations)
-                .frame(minWidth: 1000, minHeight: 660)
+                // 창의 최소 폭은 취향이 아니라 **계산해서 나온 값이다.**
+                //
+                // 사이드바는 최대 300까지 끌 수 있고, 상세 칸이 요구하는 최소는
+                // 화면마다 다르다 — 상담 705(264+1+440), 캘린더 761(460+1+300),
+                // 명식 781(460+1+320). 가장 큰 것이 명식이므로 300 + 781 = 1081이
+                // 창이 보장해야 하는 폭이다. 1000이었기 때문에 사이드바를 넓게
+                // 끌면 명식과 캘린더가 창 밖으로 넘쳤다.
+                //
+                // 여기를 줄이려면 먼저 저 셋 중 가장 큰 값을 줄여야 한다.
+                // 이 값만 낮추면 잘림이 돌아온다.
+                .frame(minWidth: 1100, minHeight: 660)
         }
         .defaultSize(width: 1180, height: 780)
         .commands {

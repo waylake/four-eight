@@ -41,11 +41,19 @@ struct ChartWorkspace: View {
     let reading: Reading
 
     var body: some View {
-        HSplitView {
+        // `HSplitView`가 아니라 `HStack`이다. 근거는 ADR 0013에 있다.
+        // 실측하면 이 화면의 `HSplitView`는 min 460 + 320 = 780을 선언해
+        // 두었는데도 상세 칸을 **1089** 밑으로 내려 주지 않았다.
+        HStack(spacing: 0) {
             PillarsCanvasView(reading: reading)
                 .frame(minWidth: 460, idealWidth: 560)
+            Divider()
+            // 상한을 둔다. `HStack`은 남는 폭을 유연한 자식에게 나눠 주므로,
+            // 상한이 없으면 **곁칸이 먼저 자라고 본문이 최소에 눌린 채로**
+            // 남는다. 실측에서 상세 892일 때 명식 캔버스가 460(최소)에 붙고
+            // 해석 패널이 431까지 자랐다. 남는 폭은 본문이 가져가야 한다.
             InterpretationPanel(reading: reading)
-                .frame(minWidth: 320, idealWidth: 400)
+                .frame(minWidth: 320, idealWidth: 400, maxWidth: 460)
         }
         .navigationTitle(reading.person.name)
         .navigationSubtitle(reading.person.birthSummary)

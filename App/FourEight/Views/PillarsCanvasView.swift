@@ -241,11 +241,36 @@ struct FlowChips<Content: View>: View {
 struct FlowLayout: Layout {
     var spacing: CGFloat = 6
 
+    /// 폭 제안을 세 가지로 나눠 답한다. **셋을 구분하지 않으면 최소 높이가
+    /// 거짓말을 한다.**
+    ///
+    /// 예전에는 `proposal.width ?? 400` 한 줄이었다. 두 가지가 틀려 있었다.
+    ///
+    /// `nil`은 "이상적인 크기를 달라"는 뜻인데 400이라는 마법의 수를 답했다.
+    /// 그리고 SwiftUI가 **최소 크기를 재려고 폭 0을 제안**하면 칩이 한 줄에
+    /// 하나씩 놓여, 칩 여섯 개짜리 줄이 자기 최소 높이를 200pt로 보고했다.
+    ///
+    /// 그 거짓말이 상담 화면에서 실제로 창을 깨뜨렸다. 상세 칸이 창보다
+    /// 250pt 커져 컴포저가 화면 밖으로 밀려나고 분할 뷰의 안전 영역까지
+    /// 어긋났다. 칩 줄 하나가 창 전체를 흔든 것이다.
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 400
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        guard !sizes.isEmpty else { return .zero }
+        let tallest = sizes.map(\.height).max() ?? 0
+
+        // nil = 이상적인 크기. 흐름 레이아웃의 이상형은 한 줄이다.
+        guard let proposed = proposal.width else {
+            let wide = sizes.reduce(0) { $0 + $1.width }
+                + spacing * CGFloat(sizes.count - 1)
+            return CGSize(width: wide, height: tallest)
+        }
+
+        // 0(최소 크기 질의)이라도 가장 넓은 칩보다 좁게 접지 않는다. 그보다
+        // 좁혀 봐야 칩은 더 줄지 않으므로 줄 수만 늘고 높이가 부풀 뿐이다.
+        let width = max(proposed, sizes.map(\.width).max() ?? 0)
+
         var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+        for size in sizes {
             if x + size.width > width, x > 0 {
                 x = 0
                 y += rowHeight + spacing

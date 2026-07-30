@@ -35,11 +35,18 @@ struct FortuneCalendarView: View {
         VStack(spacing: 0) {
             monthBar
             Divider()
-            HSplitView {
+            // `HSplitView`가 아니라 `HStack`이다. 상담 화면과 같은 이유이며
+            // 근거는 ADR 0013에 있다 — `HSplitView`는 자식이 적어 놓은
+            // `minWidth`까지 눌러 주지 않아 창보다 큰 최소를 요구하고, 창은
+            // 줄어드는 대신 **자른다.**
+            HStack(spacing: 0) {
                 calendarGrid
                     .frame(minWidth: 460, idealWidth: 600)
+                Divider()
+                // 상한을 둔다. 남는 폭은 격자가 가져가야 한다. 근거는
+                // ContentView의 같은 주석에 있다.
                 detailPane
-                    .frame(minWidth: 300, idealWidth: 360)
+                    .frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
             }
         }
         .background(.background)
